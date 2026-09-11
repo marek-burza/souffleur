@@ -21,10 +21,10 @@
         />
 
         <v-alert
-          v-if="unavailable || microphoneWarning"
+          v-if="blocked"
           class="mt-6"
-          :text="microphoneWarning || `${unavailable} Record (universal) does not need it: it captures the microphone itself and transcribes on this device.`"
-          type="warning"
+          :text="blocked"
+          type="error"
           variant="tonal"
         />
 
@@ -79,14 +79,14 @@
         />
 
         <v-btn
-          :disabled="!apiKey || busy || !!microphoneWarning"
+          :disabled="busy || !!microphoneWarning"
           text="Record (universal)"
           variant="tonal"
           @click="record('universal')"
         />
 
         <v-btn
-          :disabled="!apiKey || busy || !!unavailable"
+          :disabled="busy || !!unavailable"
           text="Record"
           variant="tonal"
           @click="record('speech')"
@@ -144,6 +144,7 @@
 
   const unavailable = recognitionUnavailable()
   const microphoneWarning = microphoneUnavailable()
+  const blocked = [microphoneWarning, unavailable].filter(Boolean).join(' ')
   const reveal = ref(false)
 
   const audioInputs = ref<string[]>([])
