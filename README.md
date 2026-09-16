@@ -10,16 +10,15 @@ An Anthropic or OpenAI API key is entered in a dialog and kept in `LocalStorage`
 plain values down; the child components hold no session state.
 
 ```text
-useRecognition(addLine) ──────────┐
-useUniversalRecognition(addLine) ─┴> useTranscript ──> TranscriptPane (editable)
+useRecognition(addLine) ──> useTranscript ──> TranscriptPane (editable)
 useCamera ──> CameraPreview + capture() ──┐
                                           ├─> lib/solver solve() ──> AnswerPane
 SettingsDialog (key, model, file upload) ─┘
 ```
 
-Three transcription paths, one `addLine` contract: each emits a line per utterance
-and none of them knows about the others. `App.vue` stops whichever is running before
-starting another, since all three want the same microphone.
+Two transcription paths, one `addLine` contract: each emits a line per utterance
+and neither knows about the other. `App.vue` stops a running live session before
+starting anything else, since both paths want the same microphone.
 
 ### 🔑 Providers
 
@@ -49,35 +48,11 @@ goes to `/v1/chat/completions`, which is fine - `maxTokens` becomes
 
 ### 🛣️ Transcription Paths
 
-**Live** (the `Record` button) uses the Web Speech API
-(`src/composables/useRecognition.ts`). It cannot be pointed at a microphone or fed
-audio: `SpeechRecognition` has no device property and `start()` takes no
-`MediaStreamTrack` outside a Chrome flag. It owns the mic and uses the system
-default, and it does its own endpointing, emitting one final result per utterance -
-so this path has no VAD of its own.
-
-Because that API is unreliable in the field, the composable restarts on every `end`,
-keeps a 10s watchdog for the silent-death case, and backs off exponentially
-(`RESTART_DELAY_MS` → `MAX_RESTART_DELAY_MS`) so a hard failure cannot spin.
-A restart is lossy, since the mic is not captured until the next instance starts, so
-a session that ended healthy (`failures === 0`) waits only `HEALTHY_RESTART_DELAY_MS`.
-Browsers cap session length even mid-utterance, so `end` also commits any pending
-interim text: no final result was delivered for those words, and the `result` handler
-clears `interim` whenever it commits a final one, so this cannot duplicate a line.
-That recovery is the *only* reason `interimResults` is on. Nothing displays a
-partial utterance - the pane gets a line once it is final - so `interim` is a plain
-local the composable does not return. Turning `interimResults` off would silently
-lose whatever a capped session was in the middle of hearing.
-`start()` throwing is its own restart path - an instance that never started fires no
-events, so nothing else would come back around.
-`recognitionUnavailable()` detects plain Chromium by User-Agent brands: such builds
-ship without Google's API keys, so the constructor exists and the mic opens but every
-attempt ends `audiostart → audioend → error: network`.
-
-**Live, universal** (the `Record (universal)` button,
-`src/composables/useUniversalRecognition.ts`) is the path for browsers where the one
-above cannot run at all - plain Chromium, Firefox - and it needs nothing but a
-microphone. It captures the mic itself and transcribes on the device:
+**Live** (the `Record` button, `src/composables/useRecognition.ts`) needs nothing
+but a microphone: it captures the mic itself, segments it with the VAD, and
+transcribes on the device, so it runs in any browser `getUserMedia` does. What
+that costs is a model download on first use and a line that appears when its
+utterance ends rather than while it is being spoken.
 
 - `src/lib/micStream.ts` is the `getUserMedia` + `AudioWorklet` capture, with the
   worklet posting blocks of mono float samples to a callback. Two details are
@@ -127,17 +102,17 @@ microphone. It captures the mic itself and transcribes on the device:
   segment is handed over with no `chunk_length_s`: the VAD already capped it below
   the 30 s window, so chunking would only add cost.
 
-**File upload** (`src/lib/transcribeFile.ts`) exists precisely because Web Speech
-cannot accept audio. It runs the whole file through Whisper in one call, which is
-what lets it afford the larger model of each pair.
+**File upload** (`src/lib/transcribeFile.ts`) transcribes a recording made
+elsewhere. It runs the whole file through Whisper in one call, which is what lets
+it afford the larger model of each pair.
 
-Both local paths share `src/lib/whisper.ts` for loading. Notes that matter:
+Both paths share `src/lib/whisper.ts` for loading. Notes that matter:
 
 - The `@huggingface/transformers` import is **dynamic** so the ~500 kB chunk and the
   22 MB ONNX Runtime WASM stay out of the initial load. Keep it that way.
 - **One model per device type, per path.** File upload gets
   `onnx-community/whisper-small.en` on WebGPU and `onnx-community/whisper-base.en`
-  on WASM; the universal live path steps both down, to base.en and tiny.en. The
+  on WASM; the live path steps both down, to base.en and tiny.en. The
   WASM path is single-threaded (see cross-origin isolation below), and small.en's
   encoder is ~350 GFLOP per 30 s window against base's ~90, so on CPU small runs
   1.5-3x slower than real time and base comfortably under it. That is survivable

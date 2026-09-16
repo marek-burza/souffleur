@@ -39,9 +39,6 @@ importers:
       '@tsconfig/node22':
         specifier: ^22.0.6
         version: 22.0.6
-      '@types/dom-speech-recognition':
-        specifier: ^0.0.12
-        version: 0.0.12
       '@types/node':
         specifier: ^26.4.1
         version: 26.4.1
@@ -776,9 +773,6 @@ packages:
 
   '@tsconfig/node22@22.0.6':
     resolution: {integrity: sha512-/5thavHAnWDZwH2H6eEn/T8pBEBhtuKaWGMslsj82kJfvzQgOgEMK7X4goBbIUjgVtAzPTtM9Ml64LA0uxO6Iw==}
-
-  '@types/dom-speech-recognition@0.0.12':
-    resolution: {integrity: sha512-SmLovKV3e/J71U5CBmKYe03Q75biuw7jiEWGoO1arc47CjtmxCr+W7cPJcAAwySSJFwr+jWkr/fPVuVuL+D6Dw==}
 
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
@@ -3000,8 +2994,6 @@ snapshots:
       vite: 8.2.2(@types/node@26.4.1)(jiti@2.7.0)(sass-embedded@1.104.0)(sass@1.104.0)(yaml@2.9.0)
 
   '@tsconfig/node22@22.0.6': {}
-
-  '@types/dom-speech-recognition@0.0.12': {}
 
   '@types/esrecurse@4.3.1': {}
 

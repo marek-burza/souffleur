@@ -73,8 +73,7 @@
 </template>
 
 <script lang="ts" setup>
-  import type { RecordingPath } from '@/lib/recording'
-  import { computed, ref, watch } from 'vue'
+  import { ref, watch } from 'vue'
   import AnswerPane from '@/components/AnswerPane.vue'
   import CameraPreview from '@/components/CameraPreview.vue'
   import SettingsDialog from '@/components/SettingsDialog.vue'
@@ -82,7 +81,6 @@
   import { useCamera } from '@/composables/useCamera'
   import { useRecognition } from '@/composables/useRecognition'
   import { useTranscript } from '@/composables/useTranscript'
-  import { useUniversalRecognition } from '@/composables/useUniversalRecognition'
   import { loadSettings } from '@/lib/settings'
   import { type Answer, createModel, solve } from '@/lib/solver'
 
@@ -97,12 +95,9 @@
 
   const { cameras, selected, video, listCameras, startCamera, capture } = useCamera()
   const { text, addLine, setText, download } = useTranscript()
-  const speech = useRecognition(addLine)
-  const universal = useUniversalRecognition(addLine)
+  const recognition = useRecognition(addLine)
 
-  // One message for the pane, whichever path produced it. Only one path runs at
-  // a time, so at most one of these is ever non-empty.
-  const error = computed(() => universal.error.value || speech.error.value)
+  const error = recognition.error
 
   watch(error, message_ => {
     if (message_) {
@@ -112,21 +107,15 @@
 
   // Loading and download progress from the local model, which the status line
   // is the only place to show once the dialog has closed.
-  watch(() => universal.progress.value.detail, detail => {
+  watch(() => recognition.progress.value.detail, detail => {
     if (detail) {
       status.value = detail
     }
   })
 
-  // Two paths, one microphone: starting either has to shut the other down.
-  async function stop () {
-    speech.stop()
-    await universal.stop()
-  }
-
-  async function onRecord (path: RecordingPath) {
+  async function onRecord () {
     // Camera first: iOS Safari ties getUserMedia to the user gesture, and the
-    // speech-recognition prompt can consume it.
+    // microphone prompt can consume it.
     let cameraError = ''
     try {
       await startCamera()
@@ -140,16 +129,12 @@
       await listCameras()
     } catch { /* enumeration is best-effort */ }
 
-    await stop()
-    if (path === 'universal') {
-      await universal.start()
-      status.value = cameraError
-        || universal.error.value
-        || 'Listening; transcribing on this device.'
-    } else {
-      speech.start()
-      status.value = cameraError || 'Listening.'
-    }
+    // A session already running holds the microphone, so it goes first.
+    await recognition.stop()
+    await recognition.start()
+    status.value = cameraError
+      || recognition.error.value
+      || 'Listening; transcribing on this device.'
   }
 
   async function onCameraMenu (open: boolean) {
@@ -159,7 +144,7 @@
   }
 
   async function onTranscribed (transcribed: string[], name: string) {
-    await stop()
+    await recognition.stop()
     setText(transcribed.join('\n'))
     tab.value = 'transcript'
     dialog.value = false

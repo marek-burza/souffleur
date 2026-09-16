@@ -21,9 +21,9 @@
         />
 
         <v-alert
-          v-if="blocked"
+          v-if="microphoneWarning"
           class="mt-6"
-          :text="blocked"
+          :text="microphoneWarning"
           type="error"
           variant="tonal"
         />
@@ -80,16 +80,9 @@
 
         <v-btn
           :disabled="busy || !!microphoneWarning"
-          text="Record (universal)"
-          variant="tonal"
-          @click="record('universal')"
-        />
-
-        <v-btn
-          :disabled="busy || !!unavailable"
           text="Record"
           variant="tonal"
-          @click="record('speech')"
+          @click="record()"
         />
       </v-card-actions>
     </v-card>
@@ -97,9 +90,7 @@
 </template>
 
 <script lang="ts" setup>
-  import type { RecordingPath } from '@/lib/recording'
   import { computed, ref, useTemplateRef, watch } from 'vue'
-  import { recognitionUnavailable } from '@/composables/useRecognition'
   import { microphoneUnavailable } from '@/lib/micStream'
   import { loadSettings, saveSettings } from '@/lib/settings'
   import { MODELS, PROVIDER_TITLES, providerOf, resolveModel } from '@/lib/solver'
@@ -108,7 +99,7 @@
   const open = defineModel<boolean>({ required: true })
 
   const emit = defineEmits<{
-    record: [path: RecordingPath]
+    record: []
     transcribed: [lines: string[], name: string]
   }>()
 
@@ -142,9 +133,7 @@
     }
   }
 
-  const unavailable = recognitionUnavailable()
   const microphoneWarning = microphoneUnavailable()
-  const blocked = [microphoneWarning, unavailable].filter(Boolean).join(' ')
   const reveal = ref(false)
 
   const audioInputs = ref<string[]>([])
@@ -193,9 +182,9 @@
     open.value = false
   }
 
-  function record (path: RecordingPath) {
+  function record () {
     saveSettings({ apiKey: apiKey.value, model: model.value })
     open.value = false
-    emit('record', path)
+    emit('record')
   }
 </script>

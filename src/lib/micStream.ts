@@ -3,9 +3,8 @@
  *
  * Microphone capture through an AudioWorklet.
  *
- * This is the half the Web Speech API cannot give us: `SpeechRecognition` owns
- * the microphone itself and exposes no stream, so any path that wants samples -
- * to run a VAD over, or to feed Whisper - has to open its own.
+ * Everything that wants samples - to run a VAD over, or to feed Whisper - opens
+ * the microphone here and gets mono float blocks at the rate Whisper wants.
  */
 
 import { SAMPLE_RATE } from '@/lib/vad'
