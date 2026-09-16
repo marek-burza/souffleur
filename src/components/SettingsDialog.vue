@@ -44,9 +44,8 @@
           >
 
           <div class="text-xs opacity-70">
-            Transcribes the file locally and loads it into the Transcript tab,
-            replacing what is there. First run downloads about model weights
-            from Hugging Face, then caches them.
+            Note: First run downloads model weights from Hugging Face, then
+            caches them.
           </div>
 
           <template v-if="busy">
