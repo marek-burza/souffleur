@@ -121,5 +121,36 @@ async function build (
 
 export function transcriptionText (output: unknown): string {
   const result = Array.isArray(output) ? output[0] : output
-  return String((result as { text?: string }).text ?? '').trim()
+  return withoutLoops(String((result as { text?: string }).text ?? '').trim())
+}
+
+/**
+ * A phrase of up to four words, repeated four or more times running. Compared on
+ * words with punctuation and case stripped, since the loop rarely repeats its
+ * commas exactly.
+ */
+const LOOP = /(?:^| )((?:\S+ ){1,4}?)\1{3,}/
+
+/**
+ * When Whisper cannot make out the audio it does not return nothing, it loops
+ * ("sad, sad, sad, ...") until the token budget runs out. Greedy decoding has no
+ * way out of that, and Transformers.js implements none of the fallbacks
+ * (temperature, compression ratio) the reference implementation uses to catch
+ * it. The run is collapsed to a single copy, so a genuine "yeah, yeah, yeah,
+ * yeah" costs a few words rather than the rest of the line.
+ */
+export function withoutLoops (text: string): string {
+  const words = text.split(/\s+/).filter(Boolean)
+  const flat = words.map(word => word.toLowerCase().replaceAll(/[^\p{L}\p{N}']/gu, '')).join(' ') + ' '
+  const match = LOOP.exec(flat)
+  if (!match) {
+    return text
+  }
+  const wordsBefore = (index: number) => flat.slice(0, index).split(' ').length - 1
+  const runStart = wordsBefore(match.index + match[0].length - match[0].trimStart().length)
+  const unit = match[1]!.split(' ').length - 1
+  return withoutLoops([
+    ...words.slice(0, runStart + unit),
+    ...words.slice(wordsBefore(match.index + match[0].length)),
+  ].join(' '))
 }

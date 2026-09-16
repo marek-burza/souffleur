@@ -17,7 +17,7 @@
 
 import { ref, shallowRef } from 'vue'
 import { openMicrophone } from '@/lib/micStream'
-import { FrameSplitter, VadAccumulator } from '@/lib/vad'
+import { FrameSplitter, SAMPLE_RATE, VadAccumulator } from '@/lib/vad'
 import {
   loadTranscriber,
   type Progress,
@@ -94,7 +94,10 @@ export function useUniversalRecognition (onLine: (text: string) => void) {
         // No `chunk_length_s`: the VAD already capped the segment below the
         // 30 s window, so the chunking machinery would add cost and nothing else.
         const text = transcriptionText(
-          await instance.pipeline(segment, { return_timestamps: false }),
+          await instance.pipeline(segment, {
+            return_timestamps: false,
+            max_new_tokens: tokenBudget(segment),
+          }),
         )
         if (text) {
           onLine(text)
@@ -191,6 +194,19 @@ export function useUniversalRecognition (onLine: (text: string) => void) {
   }
 
   return { listening, error, progress, start, stop }
+}
+
+/**
+ * Fast speech is about four words, or six tokens, a second; this leaves room
+ * above that. Left to the model's `max_length` of 448, a decoding loop on a
+ * short segment runs as long as a full 30 s window would - on the CPU path that
+ * is seconds of decode, during which the queue backs up past `MAX_PENDING` and
+ * real utterances are dropped.
+ */
+const TOKENS_PER_SECOND = 8
+
+function tokenBudget (segment: Float32Array): number {
+  return Math.ceil(segment.length / SAMPLE_RATE * TOKENS_PER_SECOND) + 8
 }
 
 function message (error_: unknown): string {

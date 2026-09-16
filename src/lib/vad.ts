@@ -13,12 +13,10 @@
  * 10 ms the energy estimate gets noisy; at 40 ms fast transitions start to slip
  * through.
  *
- * Three things keep a plain energy test usable, all of them still inside the
- * energy envelope rather than reaching for a model: an adaptive noise floor, so
- * the threshold is relative to the room instead of absolute; hysteresis, so
- * opening a segment is harder than keeping one open; and pre-speech padding, so
- * a segment does not begin midway through its first word. Each is commented at
- * the point it happens.
+ * Two things keep a plain energy test usable, both still inside the energy
+ * envelope rather than reaching for a model: a threshold that rises with the
+ * room's noise floor, and pre-speech padding, so a segment does not begin midway
+ * through its first word. Each is commented at the point it happens.
  *
  * The remaining weakness is inherent to measuring energy: RMS cannot tell speech
  * from any other sound at the same level, so a slammed door in a quiet room
@@ -35,27 +33,22 @@ const FRAME_MS = 20
 const MIN_SPEECH_MS = 300
 
 /**
- * The threshold is a multiple of the measured noise floor rather than the
- * original fixed `0.01`, because nothing about a browser microphone is
- * absolute: gain varies by device, by OS input setting, and by how far away the
- * speaker is sitting. A fixed level fails in both directions and both failures
- * are total rather than gradual. Too low for the room and every frame reads as
- * speech, so segments only ever end at the cap and Whisper is handed 15 s of
- * noise - which it does not return empty for, it hallucinates ("Thank you.",
- * "Subtitles by ...") straight into the transcript, and from there into the
- * solve prompt. Too high and nothing ever crosses, which looks exactly like a
- * broken feature.
+ * The threshold is the old fixed `0.01`, raised to a multiple of the measured
+ * noise floor when the room is louder than that allows. Too low for the room and
+ * every frame reads as speech, so segments only ever end at the cap and Whisper
+ * is handed 15 s of noise - which it does not return empty for, it hallucinates
+ * straight into the transcript, and from there into the solve prompt.
  *
- * Opening a segment takes more than keeping one open. The gap stops a keyboard
- * click or a chair scrape from starting a segment, while letting a sentence
- * that trails off stay in one.
+ * It never drops below `MIN_THRESHOLD`, and there is one threshold rather than a
+ * lower one for keeping a segment open. Both were tried: a hold level of 0.006
+ * lets a remote voice picked up from the speakers - quiet, and partly removed by
+ * echo cancellation - bridge the 600 ms pause between turns, so an utterance runs
+ * on into the other speaker until the cap cuts it mid-word. Whisper does worst
+ * on exactly that audio, and its failure there is not silence but a loop
+ * ("sad, sad, sad, ...") to the end of its token budget.
  */
-const OPEN_MULTIPLE = 3
-const CLOSE_MULTIPLE = 2
-
-// A silent room would otherwise drive the floor, and with it the threshold,
-// toward zero, at which point the VAD triggers on numerical dust.
-const MIN_NOISE_FLOOR = 0.003
+const MIN_THRESHOLD = 0.01
+const NOISE_MULTIPLE = 3
 
 /**
  * The floor follows quiet quickly and loud slowly, which is what keeps a
@@ -122,7 +115,7 @@ export class VadAccumulator {
   // a word appearing at the end of one transcript line and the start of the next.
   #pad: Float32Array[] = []
 
-  #floor = MIN_NOISE_FLOOR
+  #floor = 0
   #lastEnergy = 0
 
   constructor ({
@@ -144,7 +137,7 @@ export class VadAccumulator {
    * so without somewhere to see it, tuning it is guesswork.
    */
   get threshold (): number {
-    return this.#floor * (this.#inSpeech ? CLOSE_MULTIPLE : OPEN_MULTIPLE)
+    return Math.max(MIN_THRESHOLD, this.#floor * NOISE_MULTIPLE)
   }
 
   get energy (): number {
@@ -222,10 +215,7 @@ export class VadAccumulator {
   #observe (energy: number) {
     this.#lastEnergy = energy
     const rate = energy < this.#floor ? FLOOR_FALL : FLOOR_RISE
-    this.#floor = Math.max(
-      this.#floor + (energy - this.#floor) * rate,
-      MIN_NOISE_FLOOR,
-    )
+    this.#floor += (energy - this.#floor) * rate
   }
 }
 

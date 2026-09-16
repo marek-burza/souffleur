@@ -7,7 +7,7 @@
  * the one piece here that is pure, deterministic, and impossible to eyeball,
  * since its output is an audio segment and its input is a room. The first seven
  * cases cover the segmentation state machine; the rest cover the adaptive floor,
- * the hysteresis and the padding.
+ * the quiet-voice cut-off and the padding.
  *
  * Node runs this file directly by stripping the types, so there is no build
  * step and no dependency. That needs Node 22.6 or newer, which the project
@@ -179,40 +179,25 @@ function frames (segment: Float32Array | undefined): string {
   check('padding is cleared on emit', second?.length === 25 * FRAME, frames(second))
 }
 
-// Hysteresis. Against a silent room the floor is the fixed minimum, so opening
-// takes 0.009 and holding takes 0.006; 0.0075 sits between them.
+// A quiet second voice. Below the minimum threshold, a remote speaker leaking
+// through the speakers must not keep an utterance open after a short turn gap:
+// when it did, segments ran on to the cap and Whisper looped on the result.
 
 {
-  const marginal = speech(0.0106)
-
-  const quiet = new VadAccumulator()
-  for (let index = 0; index < 30; index++) {
-    quiet.feed(silence())
+  const vad = new VadAccumulator()
+  let segment
+  for (let index = 0; index < 50; index++) {
+    segment ??= vad.feed(speech())
   }
-  const opensAt = quiet.threshold
-  for (let index = 0; index < 30; index++) {
-    quiet.feed(marginal)
+  for (let index = 0; index < 10; index++) {
+    segment ??= vad.feed(silence())
+  }
+  for (let index = 0; index < 750 && !segment; index++) {
+    segment = vad.feed(speech(0.0106))
   }
   check(
-    'marginal level alone does not open a segment',
-    quiet.flush() === undefined,
-    `opens at ${opensAt.toFixed(4)}`,
-  )
-
-  const trailing = new VadAccumulator()
-  for (let index = 0; index < 30; index++) {
-    trailing.feed(silence())
-  }
-  for (let index = 0; index < 20; index++) {
-    trailing.feed(speech())
-  }
-  for (let index = 0; index < 20; index++) {
-    trailing.feed(marginal)
-  }
-  const segment = trailing.flush()
-  check(
-    'a voice trailing off keeps the segment open',
-    !!segment && segment.length >= (12 + 40) * FRAME,
+    'a quiet voice after a turn gap does not extend the segment',
+    !!segment && segment.length < 2 * 16_000,
     frames(segment),
   )
 }

@@ -92,17 +92,16 @@ microphone. It captures the mic itself and transcribes on the device:
   and the segment would outrun Whisper's 30 s window. `FrameSplitter` regroups
   what arrives into whole frames - worklet blocks are 128 samples and never align
   with a 320-sample frame.
-- **A single fixed energy threshold is not enough.** Three additions, all still
+- **A single fixed energy threshold is not enough.** Two additions, both still
   inside the energy envelope:
-  - *Adaptive floor.* The threshold is a multiple of a measured noise floor,
-    because microphone gain is not absolute and a fixed level fails in both
-    directions, totally rather than gradually: too low and every frame reads as
-    speech, so Whisper gets 15 s of room noise and hallucinates ("Thank you.",
-    "Subtitles by ...") into the transcript and from there into the solve prompt;
-    too high and nothing ever crosses, which looks like a broken feature.
-  - *Hysteresis.* Opening a segment takes 3x the floor, keeping one open 2x, so a
-    keyboard click does not start a segment and a sentence trailing off does not
-    end one early.
+  - *Adaptive floor.* The threshold is `0.01` or 3x a measured noise floor,
+    whichever is higher: too low for the room and every frame reads as speech, so
+    Whisper gets 15 s of room noise and hallucinates ("Thank you.", "Subtitles by
+    ...") into the transcript and from there into the solve prompt.
+  - *No hysteresis, and no lower minimum.* Both were tried. A 2x hold level with
+    the floor clamped at 0.003 let a quiet remote voice from the speakers bridge
+    the pause between turns, so segments ran to the 15 s cap, were cut mid-word,
+    and Whisper looped on them ("sad, sad, sad, ...").
   - *Pre-speech padding.* 240 ms held in a ring and prepended on speech start.
     Word onsets are quiet, and a segment that begins at the crossing begins inside
     its first word; Whisper's failure there is to guess a plausible word, which
@@ -117,6 +116,11 @@ microphone. It captures the mic itself and transcribes on the device:
   and lets every gap between words drag the estimate back down; rising at
   `FLOOR_RISE` learns a fan in about five seconds while no plausible unbroken
   utterance lifts the floor to its own level.
+- **Whisper loops rather than going quiet** on audio it cannot make out, and
+  Transformers.js has none of the reference implementation's fallbacks for it.
+  Two guards: `max_new_tokens` scales with the segment's length instead of
+  defaulting to 448, and `withoutLoops()` in `src/lib/whisper.ts` collapses a
+  phrase repeated four or more times running to one copy.
 - Segments are decoded **one at a time** - the pipeline is not reentrant - and the
   queue drops its oldest entry past `MAX_PENDING`, so a device that cannot keep up
   loses an utterance instead of drifting further behind on every one after it. The
