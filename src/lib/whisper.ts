@@ -125,11 +125,13 @@ export function transcriptionText (output: unknown): string {
 }
 
 /**
- * A phrase of up to four words, repeated four or more times running. Compared on
+ * A phrase of up to eight words, repeated four or more times running. Compared on
  * words with punctuation and case stripped, since the loop rarely repeats its
- * commas exactly.
+ * commas exactly. Eight because Whisper loops on whole clauses as readily as on
+ * single words ("I'm so excited about it", five words, four times); no real
+ * speech repeats an eight-word phrase four times running.
  */
-const LOOP = /(?:^| )((?:\S+ ){1,4}?)\1{3,}/
+const LOOP = /(?:^| )((?:\S+ ){1,8}?)\1{3,}/
 
 /**
  * When Whisper cannot make out the audio it does not return nothing, it loops

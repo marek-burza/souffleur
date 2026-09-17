@@ -33,7 +33,7 @@ const FRAME_MS = 20
 const MIN_SPEECH_MS = 300
 
 /**
- * The threshold is the old fixed `0.01`, raised to a multiple of the measured
+ * The threshold is the old fixed `0.008`, raised to a multiple of the measured
  * noise floor when the room is louder than that allows. Too low for the room and
  * every frame reads as speech, so segments only ever end at the cap and Whisper
  * is handed 15 s of noise - which it does not return empty for, it hallucinates
@@ -47,7 +47,7 @@ const MIN_SPEECH_MS = 300
  * on exactly that audio, and its failure there is not silence but a loop
  * ("sad, sad, sad, ...") to the end of its token budget.
  */
-const MIN_THRESHOLD = 0.01
+const MIN_THRESHOLD = 0.008
 const NOISE_MULTIPLE = 3
 
 /**

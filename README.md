@@ -69,7 +69,7 @@ utterance ends rather than while it is being spoken.
   with a 320-sample frame.
 - **A single fixed energy threshold is not enough.** Two additions, both still
   inside the energy envelope:
-  - *Adaptive floor.* The threshold is `0.01` or 3x a measured noise floor,
+  - *Adaptive floor.* The threshold is `0.008` or 3x a measured noise floor,
     whichever is higher: too low for the room and every frame reads as speech, so
     Whisper gets 15 s of room noise and hallucinates ("Thank you.", "Subtitles by
     ...") into the transcript and from there into the solve prompt.
