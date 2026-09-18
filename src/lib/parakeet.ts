@@ -87,7 +87,9 @@ export async function loadParakeet (
       }
       previous = best
     }
-    const text = tokenizer.decode(ids, { skip_special_tokens: true }).trim()
+    const text = ids.length > 0
+      ? tokenizer.decode(ids, { skip_special_tokens: true }).trim()
+      : ''
     return { text, unknown, frames }
   }
 

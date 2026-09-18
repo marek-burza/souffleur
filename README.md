@@ -196,6 +196,11 @@ the capability check; `src/lib/liveModel.ts` picks the live model and
     for a SentencePiece vocabulary: it produced "datatababase",
     "environonmental", "need needed", and cost some fifteen WER points. So the
     argmax, the collapse and the blank (`pad_token_id`, 1024) are done here.
+  - **An empty decode is silence, not an error.** A segment in which every frame
+    comes back blank - a door, a keyboard, a breath over the VAD threshold -
+    yields no token ids at all, and `tokenizer.decode([])` throws
+    `token_ids must be non-empty array of integers`. That is a line with nothing
+    in it, so it is returned as one.
   - **Every segment gets 0.5 s of silence, and a retry.** The export degenerates
     to all-`<unk>` on particular inputs - 16 of 78 segments - regardless of
     content, length or gain, and appending silence cures it. Padding every
@@ -264,8 +269,10 @@ the capability check; `src/lib/liveModel.ts` picks the live model and
 Multi-threaded WASM needs `SharedArrayBuffer`, which needs the page to be
 cross-origin isolated, which needs two response headers - and GitHub Pages sends
 no headers it is not told to, which is to say none. That is the whole reason the
-WASM tier was single-threaded, and it is worth four times the throughput on the
-one device that has none to spare.
+WASM tier was single-threaded, and it is worth several times the throughput on
+the one device that has none to spare. How many threads depends on the device:
+`wasmThreads()` takes half of `navigator.hardwareConcurrency`, capped at four,
+and an iPad Air 5 reports four cores, so it runs on two.
 
 A service worker can send them. `public/coi-serviceworker.js` intercepts every
 fetch and re-issues the response with `Cross-Origin-Opener-Policy: same-origin`

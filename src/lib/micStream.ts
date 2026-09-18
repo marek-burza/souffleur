@@ -56,30 +56,33 @@ export function microphoneUnavailable (): string {
 export async function openMicrophone (
   onBlock: (block: Float32Array) => void,
 ): Promise<MicStream> {
-  const stream = await navigator.mediaDevices.getUserMedia({
+  const stream = await step('getUserMedia', () => navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
       sampleRate: SAMPLE_RATE,
       echoCancellation: true,
       noiseSuppression: true,
     },
-  })
+  }))
 
   const context = new AudioContext({ sampleRate: SAMPLE_RATE })
   try {
     // Autoplay policy suspends a fresh context; the click that got us here is
     // the gesture that lifts it.
-    await context.resume()
+    await step('AudioContext.resume', () => context.resume())
 
     const url = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }))
     try {
-      await context.audioWorklet.addModule(url)
+      await step('audioWorklet.addModule', () => context.audioWorklet.addModule(url))
     } finally {
       URL.revokeObjectURL(url)
     }
 
     const source = context.createMediaStreamSource(stream)
-    const worklet = new AudioWorkletNode(context, 'audio-processor')
+    const worklet = await step(
+      'new AudioWorkletNode',
+      () => new AudioWorkletNode(context, 'audio-processor'),
+    )
     // `addEventListener` rather than an assigned `onmessage`, which means the
     // port has to be started explicitly - assigning the handler would have done
     // it implicitly.
@@ -112,5 +115,21 @@ export async function openMicrophone (
     }
     await context.close()
     throw error
+  }
+}
+
+/**
+ * Every await in here can fail for its own reason, and the runtime's message
+ * names neither the call nor the error's type - Firefox reports a blob URL it
+ * cannot resolve and a microphone it cannot find with the same
+ * `NotFoundError: The object can not be found here.` So each step says which
+ * one it was.
+ */
+async function step<T> (label: string, work: () => Promise<T> | T): Promise<T> {
+  try {
+    return await work()
+  } catch (error) {
+    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    throw new Error(`${label} failed: ${detail}`, { cause: error })
   }
 }
