@@ -24,6 +24,16 @@
             @click="onCapture"
           />
 
+          <v-select
+            v-model="prompt"
+            class="w-48 min-w-0"
+            density="compact"
+            hide-details
+            :items="PROMPTS"
+            label="Prompt"
+            @update:model-value="onPromptChange"
+          />
+
           <v-btn
             :disabled="solving"
             :loading="solving"
@@ -81,7 +91,8 @@
   import { useCamera } from '@/composables/useCamera'
   import { useRecognition } from '@/composables/useRecognition'
   import { useTranscript } from '@/composables/useTranscript'
-  import { loadSettings } from '@/lib/settings'
+  import { PROMPTS, resolvePrompt } from '@/lib/prompt'
+  import { loadSettings, saveSettings } from '@/lib/settings'
   import { type Answer, createModel, solve } from '@/lib/solver'
 
   const dialog = ref(true)
@@ -92,6 +103,7 @@
   const solving = ref(false)
   const capturing = ref(false)
   const screenshot = ref('')
+  const prompt = ref(loadSettings().prompt)
 
   const { cameras, selected, video, listCameras, startCamera, capture } = useCamera()
   const { text, addLine, setText, download } = useTranscript()
@@ -159,6 +171,10 @@
     }
   }
 
+  function onPromptChange () {
+    saveSettings({ prompt: prompt.value })
+  }
+
   async function onCapture () {
     capturing.value = true
     try {
@@ -188,7 +204,12 @@
     answer.value = undefined
     answerStatus.value = 'Solving...'
     try {
-      answer.value = await solve(createModel(apiKey, model), text.value, screenshot.value)
+      answer.value = await solve(
+        createModel(apiKey, model),
+        resolvePrompt(prompt.value).text,
+        text.value,
+        screenshot.value,
+      )
     } catch (error_) {
       answerStatus.value = `Failed due to ${message(error_)}`
     } finally {

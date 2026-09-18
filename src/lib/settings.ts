@@ -1,17 +1,20 @@
 /**
  * lib/settings.ts
  *
- * The API key (Anthropic or OpenAI) and solving model.
+ * The API key (Anthropic or OpenAI), the solving model, and the solve prompt.
  */
 
+import { resolvePrompt } from '@/lib/prompt'
 import { resolveModel } from '@/lib/solver'
 
 const API_KEY_STORAGE = 'souffleur.apiKey'
 const MODEL_STORAGE = 'souffleur.model'
+const PROMPT_STORAGE = 'souffleur.prompt'
 
 export interface Settings {
   apiKey: string
   model: string
+  prompt: string
 }
 
 export function loadSettings (): Settings {
@@ -19,10 +22,20 @@ export function loadSettings (): Settings {
   return {
     apiKey,
     model: resolveModel(apiKey, localStorage.getItem(MODEL_STORAGE) ?? ''),
+    prompt: resolvePrompt(localStorage.getItem(PROMPT_STORAGE) ?? '').value,
   }
 }
 
-export function saveSettings (settings: Settings): void {
-  localStorage.setItem(API_KEY_STORAGE, settings.apiKey)
-  localStorage.setItem(MODEL_STORAGE, settings.model)
+// Merged over what is stored, so the toolbar can save the prompt without
+// knowing the key and the dialog can save the key without knowing the prompt.
+export function saveSettings (settings: Partial<Settings>): void {
+  if (settings.apiKey !== undefined) {
+    localStorage.setItem(API_KEY_STORAGE, settings.apiKey)
+  }
+  if (settings.model !== undefined) {
+    localStorage.setItem(MODEL_STORAGE, settings.model)
+  }
+  if (settings.prompt !== undefined) {
+    localStorage.setItem(PROMPT_STORAGE, settings.prompt)
+  }
 }

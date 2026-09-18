@@ -12,13 +12,70 @@ plain values down; the child components hold no session state.
 ```text
 useRecognition(addLine) ──> useTranscript ──> TranscriptPane (editable)
 useCamera ──> CameraPreview + capture() ──┐
-                                          ├─> lib/solver solve() ──> AnswerPane
+prompt picker ──> lib/prompt ─────────────┼─> lib/solver solve() ──> AnswerPane
 SettingsDialog (key, model, file upload) ─┘
 ```
 
 Two transcription paths, one `addLine` contract: each emits a line per utterance
 and neither knows about the other. `App.vue` stops a running live session before
 starting anything else, since both paths want the same microphone.
+
+### 📝 Prompts
+
+`src/lib/prompt.ts` holds the solve prompts and nothing else; `solve()` takes one as a
+string and knows nothing about which. The picker sits between `Capture` and `Solve`
+because that is the order the two are used in, and the choice is stored under
+`souffleur.prompt` so it survives the reload the isolation service worker performs.
+`saveSettings()` therefore merges rather than replaces: the toolbar writes the prompt
+without holding the key, and the dialog writes the key without holding the prompt.
+
+There are two, and they differ in kind rather than in wording.
+
+**Generic** is the original: find the most recent question, answer it, `QUESTION` then
+`TL;DR` then bullets. It assumes the answer is the deliverable.
+
+**ML/AI architecture** is for a Google ML system design round, where the answer is not the
+deliverable - sixty minutes of talking is. That distinction is the whole design:
+
+- **The skeleton is the round's own rubric, in the interviewer's order.** Scope and metrics,
+  ML framing, data and features, architecture, model and serving, evaluation, production,
+  risks, close. Each heading carries the minute range it belongs to, so the sheet doubles as
+  pacing; a candidate who has reached `DATA + FEATURES (21-28)` at minute 35 can see it.
+- **The clarifying questions come first and carry their own fallbacks.** These questions are
+  underspecified on purpose, and asking is scored. But a candidate who asks and gets "you
+  decide" has lost the time unless the fallback is already in front of them, so every line
+  in `ASK` ends `-> assume: <what to proceed on>`. The same instinct puts `(assume)` on every
+  invented number: presenting a guess as a given is the one thing that reads worse than not
+  having the number.
+- **Coverage is measured, not eyeballed.** The first version missed three scored items
+  outright. Across ten generated answers, feature engineering and selection appeared in 5,
+  training discipline (validation scheme, hyperparameters, overfitting) in 0, and the two
+  qualities about spotting new product opportunities in 2. One added line each in `DATA`,
+  `MODEL + SERVING` and `CLOSE` took those to 9, 10 and 10. `RISKS` said "fairness or
+  privacy", and the `or` meant every code or agent question answered privacy and dropped
+  fairness; splitting it into three required lines took bias, privacy and abstention to 10
+  out of 10 each. All four fixes cost about 80 words of output.
+- **Every ML choice carries its reason.** The reader is a staff software engineer who learned
+  this working alongside data scientists, so a bare term is worse than useless: he has to
+  defend it when probed, and an interviewer will probe. Systems, serving, scale and cost are
+  named and left alone, but a model family, a loss, a sampling scheme, a metric or a training
+  trick arrives with its because-clause in under ten words - "split by time, not random,
+  random splits leak future behaviour". This cost almost nothing in length and is the
+  difference between a sheet he can read out and one he can argue from.
+- **A probe is not a question.** Once the answer is under way the interviewer stops opening
+  new problems and starts pushing on one box in the diagram. Re-emitting the skeleton there
+  is useless, so the prompt detects that the transcript ends on a follow-up and answers only
+  it - one heading, eight to fifteen lines, still naming an alternative and when it wins.
+  See the last entry in `Examples.md`.
+
+Two constraints from the rest of the app show up as hard rules in the text. `AnswerPane` is
+a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences rendered
+literally and cost lines. And a line that has to be read while talking has to be read in one
+glance, so every line stands alone and stays under twenty words, which is also what brings a
+full answer down from about 1100 words to about 750 without losing a section.
+
+`Examples.md` is six real runs of it. Both Sonnet 5 and Opus 5 hold the format; Opus runs
+about 30% longer, in more lines rather than longer ones.
 
 ### 🔑 Providers
 

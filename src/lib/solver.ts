@@ -12,7 +12,6 @@ import type { ContentBlock } from '@langchain/core/messages'
 import { ChatAnthropic } from '@langchain/anthropic'
 import { HumanMessage } from '@langchain/core/messages'
 import { ChatOpenAI } from '@langchain/openai'
-import { PROMPT_SOLUTION } from '@/lib/prompt'
 
 export type Provider = 'anthropic' | 'openai'
 
@@ -103,6 +102,7 @@ export function splitQuestion (text: string): { question: string, answer: string
 
 export async function solve (
   model: BaseChatModel,
+  prompt: string,
   transcript: string,
   screenshot: string,
 ): Promise<Answer> {
@@ -115,7 +115,7 @@ export async function solve (
   }
   content.push({
     type: 'text',
-    text: PROMPT_SOLUTION.replace('{transcript}', transcript || '(empty)'),
+    text: prompt.replace('{transcript}', transcript || '(empty)'),
   })
 
   const response = await model.invoke([new HumanMessage({ content })])
