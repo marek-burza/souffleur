@@ -3,7 +3,8 @@
  *
  * Live transcription that runs entirely in the page: the microphone is captured
  * with `getUserMedia`, split into utterances by the energy VAD, and each
- * utterance is transcribed by Whisper through Transformers.js.
+ * utterance is transcribed on the device through Transformers.js. Which model
+ * that is depends on what the device can run - see `lib/liveModel.ts`.
  *
  * Nothing here leaves the device, so the only thing it needs is a microphone,
  * which is what makes it run in any browser `getUserMedia` does.
@@ -13,30 +14,11 @@
  * so a line lands roughly one pause plus one decode after it is said.
  */
 
+import type { Progress } from '@/lib/whisper'
 import { ref, shallowRef } from 'vue'
+import { loadRecognizer, type Recognizer } from '@/lib/liveModel'
 import { openMicrophone } from '@/lib/micStream'
-import { FrameSplitter, SAMPLE_RATE, VadAccumulator } from '@/lib/vad'
-import {
-  loadTranscriber,
-  type Progress,
-  type Transcriber,
-  transcriptionText,
-  type WhisperChoice,
-} from '@/lib/whisper'
-
-/**
- * Smaller than the file path's pair, and for a different reason on each device:
- * segments arrive continuously here, so decoding has to keep ahead of speech in
- * real time rather than merely finish.
- *
- * `base.en` on the single-threaded WASM fallback was tried on an iPad and did
- * not work, so that device keeps `tiny.en`. The accuracy is worse; the
- * alternative on that hardware is no live transcript.
- */
-const MODELS: WhisperChoice = {
-  webgpu: 'onnx-community/whisper-base.en',
-  wasm: 'onnx-community/whisper-tiny.en',
-}
+import { FrameSplitter, VadAccumulator } from '@/lib/vad'
 
 /**
  * Segments waiting to be decoded. Reaching this means transcription is running
@@ -54,7 +36,7 @@ export function useRecognition (onLine: (text: string) => void) {
   const error = ref('')
   const progress = ref<Progress>({ ratio: -1, detail: '' })
 
-  const transcriber = shallowRef<Transcriber>()
+  const transcriber = shallowRef<Recognizer>()
   let microphone: Awaited<ReturnType<typeof openMicrophone>> | undefined
   let active = false
 
@@ -89,14 +71,7 @@ export function useRecognition (onLine: (text: string) => void) {
         continue
       }
       try {
-        // No `chunk_length_s`: the VAD already capped the segment below the
-        // 30 s window, so the chunking machinery would add cost and nothing else.
-        const text = transcriptionText(
-          await instance.pipeline(segment, {
-            return_timestamps: false,
-            max_new_tokens: tokenBudget(segment),
-          }),
-        )
+        const text = await instance.transcribe(segment)
         if (text) {
           onLine(text)
         }
@@ -116,18 +91,15 @@ export function useRecognition (onLine: (text: string) => void) {
 
     try {
       progress.value = { ratio: -1, detail: 'Loading speech model...' }
-      transcriber.value ??= await loadTranscriber(MODELS, update => {
+      transcriber.value ??= await loadRecognizer(update => {
         progress.value = update
       })
       if (!active) {
         return
       }
 
-      progress.value = {
-        ratio: -1,
-        detail: `Listening on ${transcriber.value.webgpu ? 'GPU' : 'CPU'}.`,
-      }
-      const device = transcriber.value.webgpu ? 'GPU' : 'CPU'
+      const device = transcriber.value.label
+      progress.value = { ratio: -1, detail: `Listening on ${device}.` }
       microphone = await openMicrophone(block => {
         splitter.split(block, frame => {
           const segment = vad.feed(frame)
@@ -192,19 +164,6 @@ export function useRecognition (onLine: (text: string) => void) {
   }
 
   return { listening, error, progress, start, stop }
-}
-
-/**
- * Fast speech is about four words, or six tokens, a second; this leaves room
- * above that. Left to the model's `max_length` of 448, a decoding loop on a
- * short segment runs as long as a full 30 s window would - on the CPU path that
- * is seconds of decode, during which the queue backs up past `MAX_PENDING` and
- * real utterances are dropped.
- */
-const TOKENS_PER_SECOND = 8
-
-function tokenBudget (segment: Float32Array): number {
-  return Math.ceil(segment.length / SAMPLE_RATE * TOKENS_PER_SECOND) + 8
 }
 
 function message (error_: unknown): string {

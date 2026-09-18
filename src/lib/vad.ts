@@ -69,6 +69,8 @@ const FLOOR_RISE = 0.002
 // The class default was 800 ms, but the server ran with `--min-silence-ms 600`,
 // which is the value that actually saw use.
 const MIN_SILENCE_MS = 600
+const MIN_EMIT_MS = 700
+const LONG_SILENCE_MS = 2000
 
 // A cap rather than a preference: without it, someone talking continuously
 // produces no transcript at all until they pause, and the segment would run
@@ -91,6 +93,8 @@ export interface VadOptions {
   frameMs?: number
   minSilenceMs?: number
   minSpeechMs?: number
+  minEmitMs?: number
+  longSilenceMs?: number
   maxSpeechMs?: number
 }
 
@@ -99,6 +103,8 @@ export class VadAccumulator {
 
   readonly #minSilenceFrames: number
   readonly #minSpeechFrames: number
+  readonly #minEmitFrames: number
+  readonly #longSilenceFrames: number
   readonly #maxSpeechSamples: number
   readonly #padFrames: number
 
@@ -122,11 +128,15 @@ export class VadAccumulator {
     frameMs = FRAME_MS,
     minSilenceMs = MIN_SILENCE_MS,
     minSpeechMs = MIN_SPEECH_MS,
+    minEmitMs = MIN_EMIT_MS,
+    longSilenceMs = LONG_SILENCE_MS,
     maxSpeechMs = MAX_SPEECH_MS,
   }: VadOptions = {}) {
     this.frameSamples = Math.trunc(SAMPLE_RATE * frameMs / 1000)
     this.#minSilenceFrames = Math.trunc(minSilenceMs / frameMs)
     this.#minSpeechFrames = Math.trunc(minSpeechMs / frameMs)
+    this.#minEmitFrames = Math.trunc(minEmitMs / frameMs)
+    this.#longSilenceFrames = Math.trunc(longSilenceMs / frameMs)
     this.#maxSpeechSamples = Math.trunc(maxSpeechMs / 1000 * SAMPLE_RATE)
     this.#padFrames = Math.trunc(PAD_MS / frameMs)
   }
@@ -177,7 +187,10 @@ export class VadAccumulator {
       // utterance, and Whisper transcribes better with it left in.
       this.#append(frame)
       this.#silenceFrames += 1
-      if (this.#silenceFrames >= this.#minSilenceFrames) {
+      const enough = this.#speechFrames >= this.#minEmitFrames
+        ? this.#minSilenceFrames
+        : this.#longSilenceFrames
+      if (this.#silenceFrames >= enough) {
         return this.flush()
       }
     } else {

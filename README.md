@@ -91,6 +91,32 @@ utterance ends rather than while it is being spoken.
   and lets every gap between words drag the estimate back down; rising at
   `FLOOR_RISE` learns a fan in about five seconds while no plausible unbroken
   utterance lifts the floor to its own level.
+- **A boundary needs something to end.** A pause only closes a segment once it
+  holds 700 ms of speech; below that the segment stays open until a 2 s pause, so
+  a fragment joins the utterance next to it instead of being decoded alone.
+  Whisper does not decline a one-word segment, it returns a plausible word, and a
+  plausible wrong word reads as transcript rather than as an error. Measured over
+  0, 400, 500, 600, 700, 800, 1000 and 1200 ms on the first ten minutes with
+  base.en: 19.8, 19.8, 19.3, 19.3, 19.2, 19.2, 19.4, 23.5. On the full 28 minutes
+  with tiny.en it is 34.9% without and 33.5% with.
+
+  Both ends of that sweep matter. There is no gain below 500 ms because nothing
+  merges, and 1.2 s is a collapse rather than a slide: the quiet second speaker
+  rarely clears it, so their turns merge into one long segment, and 13.6 s of
+  quiet speech comes back as the single word "Well,". The cost of the 700 ms that
+  does work is that a genuinely short answer lands one pause later.
+- **Cutting the cap at a quiet point was tried and is worse.** Continuous speech
+  reaches the 15 s cap far more often than it reaches a 600 ms pause - this VAD
+  calls 97% of that recording speech and hits the cap 27 times - and the cut
+  lands wherever the buffer happened to fill, which is usually inside a word. So
+  the cap was made to cut at the quietest 20 ms frame within the preceding 3 s,
+  and then at the middle of the longest sub-threshold run there, with the
+  remainder held over to open the next segment. Both scored worse than cutting
+  where the cap lands: 22.5% and 22.5% against 19.8%, base.en, first ten minutes.
+  The reason is phonetic. The quietest moment inside continuous speech is usually
+  a stop closure, which is *inside* a word rather than between two, and Whisper
+  recovers from an arbitrary cut better than from a segment that begins halfway
+  through a plosive.
 - **Whisper loops rather than going quiet** on audio it cannot make out, and
   Transformers.js has none of the reference implementation's fallbacks for it.
   Two guards: `max_new_tokens` scales with the segment's length instead of
@@ -104,24 +130,99 @@ utterance ends rather than while it is being spoken.
 
 **File upload** (`src/lib/transcribeFile.ts`) transcribes a recording made
 elsewhere. It runs the whole file through Whisper in one call, which is what lets
-it afford the larger model of each pair.
+it afford the larger model of each tier.
 
-Both paths share `src/lib/whisper.ts` for loading. Notes that matter:
+Both paths load through `src/lib/whisper.ts`, which owns the dynamic import and
+the capability check; `src/lib/liveModel.ts` picks the live model and
+`src/lib/parakeet.ts` runs it. Notes that matter:
 
 - The `@huggingface/transformers` import is **dynamic** so the ~500 kB chunk and the
   22 MB ONNX Runtime WASM stay out of the initial load. Keep it that way.
-- **One model per device type, per path.** File upload gets
-  `onnx-community/whisper-small.en` on WebGPU and `onnx-community/whisper-base.en`
-  on WASM; the live path steps both down, to base.en and tiny.en. The
-  WASM path is single-threaded (see cross-origin isolation below), and small.en's
-  encoder is ~350 GFLOP per 30 s window against base's ~90, so on CPU small runs
-  1.5-3x slower than real time and base comfortably under it. That is survivable
-  for a file, which only has to finish, and fatal live, where decoding has to keep
-  ahead of speech - hence tiny.en on the CPU fallback, which is not a guess:
-  base.en was tried there on an iPad and did not work. All four are English-only,
-  so none needs a language token, and all are plain Whisper, so all want the 30 s
-  window rather than distil-whisper's longer one.
-- Every variant uses an `fp32` encoder (353 MB for small, 82 MB for base), because
+- **One model per capability tier, per path.** The tier is not the browser, it is
+  what the runtime can actually use: WebGPU, WASM with threads, or WASM on one
+  thread. `src/lib/liveModel.ts` makes that choice for the live path and
+  `transcribeFile.ts` for the file path:
+
+  |                  | live                   | file upload |
+  | ---------------- | ---------------------- | ----------- |
+  | WebGPU           | `parakeet-ctc-0.6b` q4 | small.en    |
+  | WASM, threaded   | `parakeet-ctc-0.6b` q4 | small.en    |
+  | WASM, one thread | tiny.en                | base.en     |
+
+  Every number below comes from replaying one 28-minute mock interview - hard
+  audio: two speakers, one of them quiet and remote, continuous speech with few
+  pauses - through this project's own VAD, decoding the segments one at a time as
+  the live path does, and scoring against a `whisper-large-v3-turbo` transcript of
+  the same recording. Word error rate, with case and punctuation stripped on both
+  sides, 3301 reference words:
+
+  | live configuration                                | WER   |
+  | ------------------------------------------------- | ----- |
+  | tiny.en, before the boundary rule below (shipped) | 34.9% |
+  | tiny.en                                           | 33.5% |
+  | base.en                                           | 27.4% |
+  | small.en                                          | 25.8% |
+  | `parakeet-ctc-0.6b` q4                            | 22.8% |
+  | file upload path, small.en in 30 s chunks         | 18.6% |
+
+  The live column has to keep ahead of speech rather than merely finish, so the
+  speeds were measured the same way, in a browser, over the same segments (Chrome,
+  WASM, on a Ryzen 9 7950X - divide by roughly 1.5-2 for an iPad Air M1):
+
+  | model                  | 1 thread | 4 threads |
+  | ---------------------- | -------- | --------- |
+  | tiny.en                | 4.0x     | 9.6x      |
+  | base.en                | 2.0x     | 5.1-6.0x  |
+  | small.en               | -        | 0.8x      |
+  | `parakeet-ctc-0.6b` q4 | 1.7x     | 7.2x      |
+
+  One thread is where base.en was tried on an iPad and did not work, and the table
+  says why: 2.0x on a desktop core is about 1x on that device, which is not a
+  margin. It is also why the one-thread tier keeps tiny.en rather than the better
+  model - Parakeet is 1.7x there, no better off than base.en - and why small.en
+  never reaches the live path at all.
+- **The live model is not Whisper.** `parakeet-ctc-0.6b`
+  (`onnx-community/parakeet-ctc-0.6b-ONNX`, NVIDIA's FastConformer with a CTC
+  head, run through Transformers.js like everything else here) is 4.6 WER points
+  better than base.en on the same tier and faster than it, because its encoder
+  takes the segment at its real length instead of padding everything to 30 s, and
+  because a CTC head is one pass with no autoregressive decode - so it cannot loop
+  the way Whisper does on audio it cannot make out. `src/lib/parakeet.ts` is the
+  whole of it, and two of its lines are not decoration:
+  - **The CTC collapse is ours.** Transformers.js routes `parakeet_ctc` through
+    its wav2vec2 path, which takes the per-frame argmax and hands it straight to
+    the tokenizer **without collapsing repeated tokens or dropping the blank**.
+    That works for wav2vec2, whose tokenizer groups characters itself, and fails
+    for a SentencePiece vocabulary: it produced "datatababase",
+    "environonmental", "need needed", and cost some fifteen WER points. So the
+    argmax, the collapse and the blank (`pad_token_id`, 1024) are done here.
+  - **Every segment gets 0.5 s of silence, and a retry.** The export degenerates
+    to all-`<unk>` on particular inputs - 16 of 78 segments - regardless of
+    content, length or gain, and appending silence cures it. Padding every
+    segment removes most of them; the retry with a little more padding removes
+    the rest. Without this the affected lines come back empty.
+
+  What it costs: a 643 MB download against 110 MB for base.en (`q4` is the only
+  quantisation worth having: on the first ten minutes it scored 17.2% against
+  23.4% for `int8` and 18.4% for `fp32`, and `fp32` is a 2.4 GB download), and no punctuation or capitalisation, which the WER above does not see
+  because the scoring strips both, but a reader of the transcript does. Reverting
+  is a two-line edit in `liveModel.ts`: hand `loadTranscriber` the Whisper table
+  for every tier.
+- **Parakeet does not replace Whisper on the file path.** It is tempting, since it
+  is the better live model, but the file path is not the live path: it can afford
+  small.en and it can afford 30 s chunks with 5 s of overlap, and that context is
+  worth more than the model. Whisper gains from it and Parakeet cannot, having no
+  decoder to carry anything across a window - merging the same segments up to 30 s
+  made Parakeet *worse*, 24.0% against 22.8%, and it falls off a cliff from there -
+  31.5% at 60 s, 44.1% at 120 s - while small.en in 30 s chunks reaches 18.6%. So the file path stays
+  Whisper, and the two paths differ in more than model size.
+
+  Moonshine (`onnx-community/moonshine-base-ONNX`) also sizes its encoder to the
+  audio and is cheaper than either, but transcribed this recording worse than
+  tiny.en. A shorter Whisper encoder window is not an option: the positional
+  embedding is a 1500-frame constant in the exported graph, so anything but 30 s
+  fails to broadcast.
+- Every Whisper variant uses an `fp32` encoder (353 MB for small, 82 MB for base), because
   the encoder is where a Whisper model's accuracy lives, and a `q4` decoder on
   **both** devices - the pairing Hugging Face's own WebGPU Whisper demos use.
 - **Do not "fix" the WASM decoder to `q8`.** It is the documented WASM default and
@@ -157,6 +258,45 @@ Both paths share `src/lib/whisper.ts` for loading. Notes that matter:
 - `src/lib/audio.ts` decodes inside an `AudioContext({ sampleRate: 16000 })` so
   resampling happens *during* decode. An hour of 48 kHz stereo lands at ~440 MB
   instead of ~1.3 GB. Do not "simplify" this to a default AudioContext.
+
+### 🧵 Threads On A Static Site
+
+Multi-threaded WASM needs `SharedArrayBuffer`, which needs the page to be
+cross-origin isolated, which needs two response headers - and GitHub Pages sends
+no headers it is not told to, which is to say none. That is the whole reason the
+WASM tier was single-threaded, and it is worth four times the throughput on the
+one device that has none to spare.
+
+A service worker can send them. `public/coi-serviceworker.js` intercepts every
+fetch and re-issues the response with `Cross-Origin-Opener-Policy: same-origin`
+and `Cross-Origin-Embedder-Policy: require-corp`; `src/lib/isolate.ts` registers
+it before the app mounts and reloads once, because the document that registered
+the worker was itself delivered without the headers. Load-bearing details:
+
+- **It covers workers too**, which is the point: a service worker is in front of
+  every same-origin request, not just the document, and isolation is a property
+  of the whole agent cluster - so the ONNX Runtime proxy worker and the pthreads
+  it spawns are isolated as well. Verified end to end in Chrome against a plain
+  static server sending no headers: `crossOriginIsolated` false on first load,
+  true after the reload, `SharedArrayBuffer` present, Whisper then running on
+  four threads.
+- **The reload happens once per session.** A `sessionStorage` marker is set
+  before reloading, so a browser that refuses to isolate - or a private window
+  where registration throws - gets one wasted reload rather than a loop.
+- **Failure is a downgrade, never a break.** `wasmThreads()` asks the page
+  whether it actually is isolated, so a device that cannot be gets one thread and
+  the one-thread model. This can add capability and cannot remove it, which is
+  what makes it safe to ship to a device it has not been tried on.
+- **`require-corp` is the only option**, since Safari has no `credentialless`,
+  and it means every cross-origin subresource has to be CORS-clean. Both are:
+  the model weights from the Hugging Face CDN and the ONNX Runtime build from
+  jsdelivr are fetched in CORS mode and answer with `access-control-allow-origin`.
+  Adding a cross-origin asset that is not would break the app rather than just
+  that asset.
+- **Decode moves off the main thread** with it (`wasm.proxy = true`, which
+  Transformers.js leaves off). A decode is one to two seconds of blocking work,
+  and the main thread is where the UI and the worklet's `postMessage` handler
+  live.
 
 ## 🚀 Bootstrap
 
@@ -265,9 +405,10 @@ dependency and no build step - Node strips the types and runs the file, which is
 why it can import a `.ts` source directly - and it is not the seed of a test
 framework. The VAD earns it by being the one piece here that is pure,
 deterministic, and impossible to eyeball, since its input is a room and its
-output is an audio segment. The first seven cases cover the segmentation state
-machine; the rest cover the adaptive floor, the hysteresis and the padding. Two
-of them were written after catching real bugs, so if you change `vad.ts`, run it.
+output is an audio segment. The first cases cover the segmentation state
+machine, including what a boundary needs before it ends a segment; the rest
+cover the adaptive floor, the hysteresis and the padding. Two of them were written after
+catching real bugs, so if you change `vad.ts`, run it.
 
 Everything else is verified with `lint`, `type-check`, `build`, and by driving the
 app in a browser. CI runs `install --frozen-lockfile`, `lint`, `check:vad`, then

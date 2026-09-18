@@ -8,6 +8,7 @@
 import { createApp } from 'vue'
 
 // Plugins
+import { requestIsolation } from '@/lib/isolate'
 import { registerPlugins } from '@/plugins'
 
 // Components
@@ -17,6 +18,8 @@ import App from './App.vue'
 import 'unfonts.css'
 import './styles/tailwind.css'
 import './styles/main.scss'
+
+await requestIsolation()
 
 const app = createApp(App)
 

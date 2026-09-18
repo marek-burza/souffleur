@@ -12,6 +12,7 @@ import { loadTranscriber, type Progress, type WhisperChoice } from '@/lib/whispe
 
 const MODELS: WhisperChoice = {
   webgpu: 'onnx-community/whisper-small.en',
+  threaded: 'onnx-community/whisper-small.en',
   wasm: 'onnx-community/whisper-base.en',
 }
 

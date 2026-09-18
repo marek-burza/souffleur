@@ -5,9 +5,10 @@
  *
  * The project has no test runner, and this is not the start of one: the VAD is
  * the one piece here that is pure, deterministic, and impossible to eyeball,
- * since its output is an audio segment and its input is a room. The first seven
- * cases cover the segmentation state machine; the rest cover the adaptive floor,
- * the quiet-voice cut-off and the padding.
+ * since its output is an audio segment and its input is a room. The first cases
+ * cover the segmentation state machine, including what a boundary needs before
+ * it ends a segment; the rest cover the adaptive floor, the quiet-voice cut-off
+ * and the padding.
  *
  * Node runs this file directly by stripping the types, so there is no build
  * step and no dependency. That needs Node 22.6 or newer, which the project
@@ -69,7 +70,7 @@ function frames (segment: Float32Array | undefined): string {
 {
   const vad = new VadAccumulator()
   let early
-  for (let index = 0; index < 25; index++) {
+  for (let index = 0; index < 60; index++) {
     early ||= vad.feed(speech())
   }
   let segment
@@ -78,7 +79,7 @@ function frames (segment: Float32Array | undefined): string {
   }
   check(
     'speech then silence emits a segment',
-    !early && !!segment && segment.length >= 25 * FRAME,
+    !early && !!segment && segment.length >= 60 * FRAME,
     frames(segment),
   )
 }
@@ -99,14 +100,14 @@ function frames (segment: Float32Array | undefined): string {
 
 {
   const vad = new VadAccumulator()
-  for (let index = 0; index < 25; index++) {
+  for (let index = 0; index < 35; index++) {
     vad.feed(speech())
   }
   let split
   for (let index = 0; index < 10; index++) {
     split ||= vad.feed(silence())
   }
-  for (let index = 0; index < 25; index++) {
+  for (let index = 0; index < 35; index++) {
     split ||= vad.feed(speech())
   }
   let segment
@@ -130,6 +131,29 @@ function frames (segment: Float32Array | undefined): string {
     'the cap forces a segment',
     !!segment && Math.abs(segment.length - 16_000) < 2 * FRAME,
     segment && `${segment.length} samples`,
+  )
+}
+
+{
+  const vad = new VadAccumulator()
+  let early
+  for (let index = 0; index < 30; index++) {
+    early ||= vad.feed(speech())
+  }
+  for (let index = 0; index < 40; index++) {
+    early ||= vad.feed(silence())
+  }
+  for (let index = 0; index < 60; index++) {
+    early ||= vad.feed(speech())
+  }
+  let segment
+  for (let index = 0; index < 40 && !segment; index++) {
+    segment = vad.feed(silence())
+  }
+  check(
+    'a fragment waits for the next utterance rather than going alone',
+    !early && !!segment && segment.length >= 130 * FRAME,
+    frames(segment),
   )
 }
 
@@ -163,20 +187,20 @@ function frames (segment: Float32Array | undefined): string {
 
 {
   const vad = new VadAccumulator()
-  for (let index = 0; index < 25; index++) {
+  for (let index = 0; index < 60; index++) {
     vad.feed(speech())
   }
   let first
   for (let index = 0; index < 40 && !first; index++) {
     first = vad.feed(silence())
   }
-  for (let index = 0; index < 25; index++) {
+  for (let index = 0; index < 60; index++) {
     vad.feed(speech())
   }
   // The trailing silence went out with the first segment; if the ring survived,
   // the second segment would begin by repeating it.
   const second = vad.flush()
-  check('padding is cleared on emit', second?.length === 25 * FRAME, frames(second))
+  check('padding is cleared on emit', second?.length === 60 * FRAME, frames(second))
 }
 
 // A quiet second voice. Below the minimum threshold, a remote speaker leaking
@@ -186,7 +210,7 @@ function frames (segment: Float32Array | undefined): string {
 {
   const vad = new VadAccumulator()
   let segment
-  for (let index = 0; index < 50; index++) {
+  for (let index = 0; index < 60; index++) {
     segment ??= vad.feed(speech())
   }
   for (let index = 0; index < 10; index++) {

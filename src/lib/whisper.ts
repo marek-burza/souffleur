@@ -20,19 +20,9 @@ export interface Progress {
   detail: string
 }
 
-/**
- * One model per device type, because the two devices are not in the same
- * performance class. The WASM path is single-threaded (nothing here sets the
- * cross-origin isolation headers that would unlock threads), so it gets the
- * smaller model of each pair.
- *
- * The encoder is where a Whisper model's accuracy lives, so it stays `fp32`.
- * The decoder is `q4` on both devices - which is what Hugging Face's own WebGPU
- * Whisper demos ship, and, less obviously, the only quantisation the current
- * runtime will load at all. See the note on `q8` in the README.
- */
 export interface WhisperChoice {
   webgpu: string
+  threaded: string
   wasm: string
 }
 
@@ -41,6 +31,7 @@ const DTYPE = { encoder_model: 'fp32', decoder_model_merged: 'q4' } as const
 export interface Transcriber {
   pipeline: AutomaticSpeechRecognitionPipeline
   webgpu: boolean
+  threads: number
 }
 
 type TransformersEnv = typeof TransformersEnvValue
@@ -67,6 +58,13 @@ function webgpuUsable (env: TransformersEnv): boolean {
   return paths.mjs.includes('asyncify') || paths.mjs.includes('jspi')
 }
 
+export function wasmThreads (): number {
+  if (!globalThis.crossOriginIsolated || typeof SharedArrayBuffer === 'undefined') {
+    return 1
+  }
+  return Math.min(4, Math.max(1, Math.floor((navigator.hardwareConcurrency ?? 2) / 2)))
+}
+
 /**
  * Loads the pipeline for whichever device this browser can actually run.
  *
@@ -82,10 +80,47 @@ export async function loadTranscriber (
   models: WhisperChoice,
   onProgress: (progress: Progress) => void,
 ): Promise<Transcriber> {
-  // Dynamic so the ~500 kB library chunk and the 22 MB ONNX Runtime WASM stay
-  // out of the initial load. Keep it that way.
-  const { env, pipeline } = await import('@huggingface/transformers')
+  const { env, pipeline } = await transformers()
   return build(pipeline, env, models, onProgress)
+}
+
+// Dynamic so the ~500 kB library chunk and the 22 MB ONNX Runtime WASM stay out
+// of the initial load. Keep it that way.
+export async function transformers () {
+  return import('@huggingface/transformers')
+}
+
+export interface Capability {
+  webgpu: boolean
+  threads: number
+  device: 'webgpu' | 'wasm'
+  label: string
+}
+
+export function capability (env: TransformersEnv): Capability {
+  const webgpu = webgpuUsable(env)
+  const threads = webgpu ? 1 : wasmThreads()
+  if (!webgpu && env.backends?.onnx?.wasm) {
+    env.backends.onnx.wasm.numThreads = threads
+    env.backends.onnx.wasm.proxy = true
+  }
+  return {
+    webgpu,
+    threads,
+    device: webgpu ? 'webgpu' : 'wasm',
+    label: webgpu ? 'GPU' : `CPU${threads > 1 ? ` x${threads}` : ''}`,
+  }
+}
+
+export function downloadProgress (onProgress: (progress: Progress) => void) {
+  return (event: { status: string, progress?: number, file?: string }) => {
+    if (event.status === 'progress' && event.progress !== undefined) {
+      onProgress({
+        ratio: event.progress / 100,
+        detail: `Downloading model: ${event.file ?? ''}`,
+      })
+    }
+  }
 }
 
 async function build (
@@ -94,21 +129,16 @@ async function build (
   models: WhisperChoice,
   onProgress: (progress: Progress) => void,
 ): Promise<Transcriber> {
-  const webgpu = webgpuUsable(env)
+  const { webgpu, threads, device } = capability(env)
   const options = {
-    device: webgpu ? 'webgpu' as const : 'wasm' as const,
+    device,
     dtype: DTYPE,
-    progress_callback: (event: { status: string, progress?: number, file?: string }) => {
-      if (event.status === 'progress' && event.progress !== undefined) {
-        onProgress({
-          ratio: event.progress / 100,
-          detail: `Downloading model: ${event.file ?? ''}`,
-        })
-      }
-    },
+    progress_callback: downloadProgress(onProgress),
   }
 
-  const model = webgpu ? models.webgpu : models.wasm
+  const model = webgpu
+    ? models.webgpu
+    : (threads > 1 ? models.threaded : models.wasm)
   let loaded
   try {
     loaded = await pipeline('automatic-speech-recognition', model, options)
@@ -116,7 +146,7 @@ async function build (
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(`${model} on ${options.device} failed to load: ${detail}`, { cause: error })
   }
-  return { pipeline: loaded as AutomaticSpeechRecognitionPipeline, webgpu }
+  return { pipeline: loaded as AutomaticSpeechRecognitionPipeline, webgpu, threads }
 }
 
 export function transcriptionText (output: unknown): string {
@@ -124,23 +154,8 @@ export function transcriptionText (output: unknown): string {
   return withoutLoops(String((result as { text?: string }).text ?? '').trim())
 }
 
-/**
- * A phrase of up to eight words, repeated four or more times running. Compared on
- * words with punctuation and case stripped, since the loop rarely repeats its
- * commas exactly. Eight because Whisper loops on whole clauses as readily as on
- * single words ("I'm so excited about it", five words, four times); no real
- * speech repeats an eight-word phrase four times running.
- */
 const LOOP = /(?:^| )((?:\S+ ){1,8}?)\1{3,}/
 
-/**
- * When Whisper cannot make out the audio it does not return nothing, it loops
- * ("sad, sad, sad, ...") until the token budget runs out. Greedy decoding has no
- * way out of that, and Transformers.js implements none of the fallbacks
- * (temperature, compression ratio) the reference implementation uses to catch
- * it. The run is collapsed to a single copy, so a genuine "yeah, yeah, yeah,
- * yeah" costs a few words rather than the rest of the line.
- */
 export function withoutLoops (text: string): string {
   const words = text.split(/\s+/).filter(Boolean)
   const flat = words.map(word => word.toLowerCase().replaceAll(/[^\p{L}\p{N}']/gu, '')).join(' ') + ' '
