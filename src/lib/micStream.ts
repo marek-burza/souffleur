@@ -56,14 +56,7 @@ export function microphoneUnavailable (): string {
 export async function openMicrophone (
   onBlock: (block: Float32Array) => void,
 ): Promise<MicStream> {
-  const stream = await step('getUserMedia', () => navigator.mediaDevices.getUserMedia({
-    audio: {
-      channelCount: 1,
-      sampleRate: SAMPLE_RATE,
-      echoCancellation: true,
-      noiseSuppression: true,
-    },
-  }))
+  const stream = await step('getUserMedia', () => capture())
 
   const context = new AudioContext({ sampleRate: SAMPLE_RATE })
   try {
@@ -81,7 +74,11 @@ export async function openMicrophone (
     const source = context.createMediaStreamSource(stream)
     const worklet = await step(
       'new AudioWorkletNode',
-      () => new AudioWorkletNode(context, 'audio-processor'),
+      () => new AudioWorkletNode(context, 'audio-processor', {
+        channelCount: 1,
+        channelCountMode: 'explicit',
+        channelInterpretation: 'speakers',
+      }),
     )
     // `addEventListener` rather than an assigned `onmessage`, which means the
     // port has to be started explicitly - assigning the handler would have done
@@ -118,13 +115,24 @@ export async function openMicrophone (
   }
 }
 
-/**
- * Every await in here can fail for its own reason, and the runtime's message
- * names neither the call nor the error's type - Firefox reports a blob URL it
- * cannot resolve and a microphone it cannot find with the same
- * `NotFoundError: The object can not be found here.` So each step says which
- * one it was.
- */
+async function capture (): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        sampleRate: SAMPLE_RATE,
+        echoCancellation: true,
+        noiseSuppression: true,
+      },
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'NotAllowedError') {
+      throw error
+    }
+    return navigator.mediaDevices.getUserMedia({ audio: true })
+  }
+}
+
 async function step<T> (label: string, work: () => Promise<T> | T): Promise<T> {
   try {
     return await work()
