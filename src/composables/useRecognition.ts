@@ -167,5 +167,5 @@ export function useRecognition (onLine: (text: string) => void) {
 }
 
 function message (error_: unknown): string {
-  return error_ instanceof Error ? `${error_.name}: ${error_.message}` : String(error_)
+  return error_ instanceof Error ? error_.message : String(error_)
 }

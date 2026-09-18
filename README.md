@@ -61,21 +61,6 @@ utterance ends rather than while it is being spoken.
   connected through a zero-gain node to `destination`, because a graph that reaches
   no destination is never pulled. The `AudioContext` is fixed at 16 kHz so
   resampling happens in the graph and nothing downstream has to do it.
-- **The capture asks twice.** The first request is the one worth having -
-  `channelCount: 1`, `sampleRate: 16000`, echo cancellation, noise suppression -
-  and a browser that cannot match it does not always say so in those terms:
-  Firefox answers with `NotFoundError: The object can not be found here.`, which
-  reads as a missing microphone and is not one. So anything but `NotAllowedError`
-  retries with a plain `{ audio: true }`, since nothing downstream needs those
-  constraints to hold: the `AudioContext` resamples whatever it is given, and the
-  `AudioWorkletNode` is explicitly mono, which is what downmixes a stereo device
-  the relaxed request may have been granted. Without that the worklet, which
-  reads the first channel only, would hear its left channel rather than both.
-- **Every step in the capture names itself.** The runtime's own message names
-  neither the call that failed nor the error's type, and Firefox uses that one
-  `NotFoundError` text for a microphone it cannot find and a blob URL it cannot
-  resolve alike, so `getUserMedia` and `addModule` failures are indistinguishable
-  in the banner. Each await is labelled and the error's `name` is kept.
 - `src/lib/vad.ts` is the energy VAD: 20 ms frames, 300 ms minimum speech, 600 ms
   of silence to end a segment, and a 15 s cap. The cap is not a preference:
   without it someone talking continuously produces no transcript until they pause,

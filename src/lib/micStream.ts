@@ -56,30 +56,30 @@ export function microphoneUnavailable (): string {
 export async function openMicrophone (
   onBlock: (block: Float32Array) => void,
 ): Promise<MicStream> {
-  const stream = await step('getUserMedia', () => capture())
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      channelCount: 1,
+      sampleRate: SAMPLE_RATE,
+      echoCancellation: true,
+      noiseSuppression: true,
+    },
+  })
 
   const context = new AudioContext({ sampleRate: SAMPLE_RATE })
   try {
     // Autoplay policy suspends a fresh context; the click that got us here is
     // the gesture that lifts it.
-    await step('AudioContext.resume', () => context.resume())
+    await context.resume()
 
     const url = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }))
     try {
-      await step('audioWorklet.addModule', () => context.audioWorklet.addModule(url))
+      await context.audioWorklet.addModule(url)
     } finally {
       URL.revokeObjectURL(url)
     }
 
     const source = context.createMediaStreamSource(stream)
-    const worklet = await step(
-      'new AudioWorkletNode',
-      () => new AudioWorkletNode(context, 'audio-processor', {
-        channelCount: 1,
-        channelCountMode: 'explicit',
-        channelInterpretation: 'speakers',
-      }),
-    )
+    const worklet = new AudioWorkletNode(context, 'audio-processor')
     // `addEventListener` rather than an assigned `onmessage`, which means the
     // port has to be started explicitly - assigning the handler would have done
     // it implicitly.
@@ -112,32 +112,5 @@ export async function openMicrophone (
     }
     await context.close()
     throw error
-  }
-}
-
-async function capture (): Promise<MediaStream> {
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        sampleRate: SAMPLE_RATE,
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
-    })
-  } catch (error) {
-    if (error instanceof Error && error.name === 'NotAllowedError') {
-      throw error
-    }
-    return navigator.mediaDevices.getUserMedia({ audio: true })
-  }
-}
-
-async function step<T> (label: string, work: () => Promise<T> | T): Promise<T> {
-  try {
-    return await work()
-  } catch (error) {
-    const detail = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-    throw new Error(`${label} failed: ${detail}`, { cause: error })
   }
 }
