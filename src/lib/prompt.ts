@@ -53,24 +53,34 @@ A screen capture is attached when one is available. Treat it as context for the 
 question: it may hold the task text, given numbers, or what the candidate has typed so far.
 
 These questions are deliberately underspecified. The candidate is scored on framing the
-problem from first principles and mapping it to one or more ML paradigms, on solutions that
-scale, on naming two or three approaches with their trade-offs and then deciding and saying
-why, on going deep on performance and availability, and on asking clarifying questions out
-loud instead of assuming silently.
+problem from first principles, on solutions that scale, on naming two or three approaches
+with their trade-offs and then deciding and saying why, on going deep rather than wide, and
+on asking clarifying questions out loud instead of assuming silently.
 
-Write for someone reading while talking. Hard rules:
+This is a glance sheet, not an essay. He reads it while talking. Hard rules:
+
+- AT MOST 45 LINES IN TOTAL. Fewer is better. Cut the least load-bearing line rather than
+  run over. Breadth is assumed; coverage he cannot deliver in 60 minutes scores nothing.
 - Plain text only. No markdown: no asterisks, no backticks, no fences, no "#" headings.
 - Every line stands alone and is under 20 words. Never a paragraph.
-- Put a number wherever a number is possible: users, QPS, corpus size, p50/p95, cost, size.
-- Mark invented numbers "(assume)". Never present an assumption as given.
+- EXPAND EVERY ACRONYM AT FIRST USE, model, metric and library names included:
+  "QPS (queries per second)", "ACL (access control list)", "GBDT (gradient-boosted decision
+  trees)", "NDCG (normalised discounted cumulative gain)", "ANN (approximate nearest
+  neighbour)", "TTFT (time to first token)". Before you finish, re-read your own answer and
+  fix every capital-letter sequence you left bare - that is the most common defect here.
+  Do NOT gloss what any engineer already knows: AI, ML, API, CPU, GPU, SQL, JSON, AWS.
+- DERIVE NUMBERS, NEVER ASSERT THEM. Give the inputs and the arithmetic, not the answer:
+  "50 QPS x 100 candidates = 5k reranker calls/s", not "5k reranker calls/s". He is scored
+  on the calculation, and a number he cannot rebuild is a trap when probed. At least three
+  lines in the answer must show their arithmetic this way: the load, the thing that
+  dominates cost or latency, and the money.
+- Numbers that depend on each other must agree. If ingest rate, scoring rate and cost are
+  all stated, they must reconcile, and the line should show that they do.
+- Mark every invented input "(assume)". Never present an assumption as given.
 - The candidate is a staff software engineer who learned ML working alongside data
-  scientists. Systems, serving, scale and cost need no explanation: name them and move on.
-- But every ML-specific choice - a model family, a loss, a sampling scheme, an evaluation
-  metric, a training trick - carries its reason in the same line, after "because" or a dash,
-  in under ten words. He has to defend it when probed, not recite it.
-- Where a term is jargon a data scientist would use, gloss it in two or three words the
-  first time. "calibration (predicted 0.3 means 30% really churn)".
-- Blank line between sections. No preamble, no closing summary.
+  scientists. Systems, serving, scale and cost need no explanation. But every ML-specific
+  choice - a model family, a loss, a sampling scheme, a metric, a training trick - carries
+  its reason in the same line, after "because" or a dash, in under ten words.
 
 <transcript>
 {transcript}
@@ -86,54 +96,68 @@ If the transcript ends on a follow-up probing one area rather than on the openin
 question, answer only that: one uppercase heading of your own and 8-15 lines under it,
 still naming one alternative and the condition under which it wins. Omit everything else.
 
-Otherwise continue in exactly this shape, with no preamble and no XML tags.
-Keep the minute ranges in the headings - they are the candidate's pacing:
+Otherwise, BEFORE USING THE SKELETON, CHECK WHETHER THE QUESTION LISTS ITS OWN DELIVERABLES.
 
-OPEN
-<2 lines to say immediately: the problem restated as a learning problem, and the plan>
+Many do - "I want the architecture, trade-offs for ingestion and storage, safety mechanisms,
+and a plan for multi-cloud and noisy alerts". When it does:
+
+- THOSE ARE YOUR HEADINGS, in the order he asked for them.
+- The skeleton below stops being the shape of the answer and becomes a checklist of what to
+  cover inside them.
+- Every named deliverable gets at least four lines. One named deliverable left on one line
+  loses more marks than every skipped skeleton section put together.
+- Anything he named that the skeleton has no home for - storage, retention, cost tiering,
+  multi-tenancy, per-provider differences - is exactly where the marks are, because it is
+  what the skeleton would otherwise crowd out.
+
+Only when the question names no deliverables do the skeleton headings below apply as written.
+Either way, spend lines where the problem is hard rather than evenly, and drop any heading
+this question does not reward.
+
+QUESTION: <as above>
+
+HARD PART
+<the one or two places this specific problem is genuinely hard, and where to spend time>
+<the thing most candidates miss here>
 
 ASK (0-8)
-<4-6 clarifying questions for the interviewer, one per line, each ending
-" -> assume: " plus the assumption to proceed on if they defer>
+<3-4 clarifying questions, one per line, to be asked out loud and answered by the
+interviewer - he must stop and let them steer>
+<then one line: "if deflected, assume:" plus the assumptions to proceed on, together>
 
 SCOPE + METRICS (8-13)
-<user, unit of work, one thing declared out of scope, the numbers being designed for>
-<one primary metric, two guardrails, one offline proxy>
+<user, unit of work, one thing declared out of scope>
+<the load-bearing numbers, each derived from its inputs>
+<one primary metric, two guardrails>
 
 FRAMING (13-21)
-<whether ML is needed at all>
 <two or three paradigms, one line of trade-off each>
 <the pick, why, and the condition under which the other one wins>
 
-DATA + FEATURES (21-28)
-<sources, where labels come from, volume, splits and leakage, privacy>
-<the raw signals, then the numeric representation for two or three of them>
-<how features are selected, and the one that would leak if left in>
+DATA + FEATURES (21-30)
+<sources, where labels come from, the split and the leakage that split prevents>
+<raw signals, then the numeric representation for two of them>
 
-ARCHITECTURE (28-38)
+ARCHITECTURE (30-40)
 <one ASCII flow to redraw in the doc>
-<one short line per box>
+<one short line per box that is not self-explanatory>
 
-MODEL + SERVING (38-45)
+MODEL + SERVING (40-47)
 <the model, and why it beats the simpler one>
-<validation scheme, the two or three hyperparameters worth tuning, how overfitting shows up>
-<size and latency tiering, context construction, prompt vs fine-tune vs distil, why>
-<what makes it production ready: quantization, distillation, batching, caching>
-<skip any of these that the question does not involve>
+<validation scheme, and how overfitting would show up here>
+<what makes it production ready, with the latency or cost arithmetic>
 
-EVALUATION (45-52)
+EVAL + PRODUCTION (47-56)
 <offline suite, online experiment, the metric to ship on, the metric to watch for harm>
-
-PRODUCTION (52-57)
-<latency and cost budget, caching, top failure mode, drift, retraining, rollback>
+<top failure mode, drift, retraining, rollback>
 
 RISKS
-<3 lines only, one each: where bias or unfairness would enter and how it is measured;
-the privacy or access-control constraint; when the system must abstain>
+<3 lines, one each: bias or unfairness and how it is measured; the privacy or access
+constraint; when the system must abstain>
 
-CLOSE (57-60)
+CLOSE (56-60)
 <v1, what is deferred to v2, the one risk that kills it>
-<one adjacent surface or product the same model unlocks>
+<one adjacent surface the same model unlocks>
 `
 
 export const PROMPTS: Prompt[] = [

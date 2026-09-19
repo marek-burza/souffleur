@@ -37,45 +37,52 @@ There are two, and they differ in kind rather than in wording.
 **ML/AI architecture** is for a Google ML system design round, where the answer is not the
 deliverable - sixty minutes of talking is. That distinction is the whole design:
 
-- **The skeleton is the round's own rubric, in the interviewer's order.** Scope and metrics,
-  ML framing, data and features, architecture, model and serving, evaluation, production,
-  risks, close. Each heading carries the minute range it belongs to, so the sheet doubles as
-  pacing; a candidate who has reached `DATA + FEATURES (21-28)` at minute 35 can see it.
-- **The clarifying questions come first and carry their own fallbacks.** These questions are
-  underspecified on purpose, and asking is scored. But a candidate who asks and gets "you
-  decide" has lost the time unless the fallback is already in front of them, so every line
-  in `ASK` ends `-> assume: <what to proceed on>`. The same instinct puts `(assume)` on every
-  invented number: presenting a guess as a given is the one thing that reads worse than not
-  having the number.
-- **Coverage is measured, not eyeballed.** The first version missed three scored items
-  outright. Across ten generated answers, feature engineering and selection appeared in 5,
-  training discipline (validation scheme, hyperparameters, overfitting) in 0, and the two
-  qualities about spotting new product opportunities in 2. One added line each in `DATA`,
-  `MODEL + SERVING` and `CLOSE` took those to 9, 10 and 10. `RISKS` said "fairness or
-  privacy", and the `or` meant every code or agent question answered privacy and dropped
-  fairness; splitting it into three required lines took bias, privacy and abstention to 10
-  out of 10 each. All four fixes cost about 80 words of output.
-- **Every ML choice carries its reason.** The reader is a staff software engineer who learned
-  this working alongside data scientists, so a bare term is worse than useless: he has to
-  defend it when probed, and an interviewer will probe. Systems, serving, scale and cost are
-  named and left alone, but a model family, a loss, a sampling scheme, a metric or a training
-  trick arrives with its because-clause in under ten words - "split by time, not random,
-  random splits leak future behaviour". This cost almost nothing in length and is the
-  difference between a sheet he can read out and one he can argue from.
-- **A probe is not a question.** Once the answer is under way the interviewer stops opening
-  new problems and starts pushing on one box in the diagram. Re-emitting the skeleton there
-  is useless, so the prompt detects that the transcript ends on a follow-up and answers only
-  it - one heading, eight to fifteen lines, still naming an alternative and when it wins.
-  See the last entry in `Examples.md`.
+- **It is a glance sheet, not an essay.** He reads it while speaking, so there is a hard cap
+  of 45 lines and 20 words per line. Breadth is assumed and coverage he cannot deliver in an
+  hour scores nothing, so the instruction is to spend lines where the problem is hard and
+  drop the rest.
+- **The clarifying questions are an exchange, not a monologue.** They are scored, but only if
+  actually asked. An earlier version put `-> assume:` on every one, which invited him to read
+  the question and his own answer to it in the same breath and never let the interviewer
+  steer. Now the questions stand alone and a single `if deflected, assume:` line carries the
+  fallbacks together.
+- **Numbers are derived, never asserted.** `50 QPS x 100 candidates = 5k reranker calls/s`,
+  not `5k reranker calls/s`. The calculation is what is scored, and a number he cannot
+  rebuild is a trap the moment he is probed. At least three lines must show their arithmetic:
+  the load, whatever dominates cost or latency, and the money.
+- **Every acronym is expanded at first use**, model and metric names included. He learned this
+  working alongside data scientists, so a bare `GBDT` or `NDCG` is worse than the plain
+  phrase - he will be asked to expand it.
+- **A question that names its own deliverables overrides the skeleton.** Many do: *architecture,
+  trade-offs for ingestion and storage, safety mechanisms, a multi-cloud plan*. Those become
+  the headings, and the skeleton drops to a checklist of what to cover inside them. Without
+  this the template crowded out whatever it had no heading for - storage and multi-cloud got
+  zero lines and one line respectively on a question that named both.
+- **Every ML choice carries its reason.** Systems, serving, scale and cost are named and left
+  alone, but a model family, a loss, a sampling scheme, a metric or a training trick arrives
+  with its because-clause in under ten words.
+- **A probe is not a question.** Once the answer is under way the interviewer stops opening new
+  problems and starts pushing on one box in the diagram, so the prompt detects a transcript
+  ending on a follow-up and answers only that - one heading, eight to fifteen lines.
 
-Two constraints from the rest of the app show up as hard rules in the text. `AnswerPane` is
-a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences rendered
-literally and cost lines. And a line that has to be read while talking has to be read in one
-glance, so every line stands alone and stays under twenty words, which is also what brings a
-full answer down from about 1100 words to about 750 without losing a section.
+Measured over thirteen questions scraped from five companies' ML-system-design sets, against
+the previous version of the prompt:
+
+| | before | after |
+| --- | --- | --- |
+| words per answer | 723 | 582 |
+| lines per answer | 66 | 50 |
+| bare acronyms per answer | 5.7 | 1.3 |
+| answers with no worked arithmetic | 12/13 | 1/13 |
+| answers carrying more than three bare acronyms | 9/13 | 1/13 |
+
+`AnswerPane` is a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences
+render literally and cost lines.
 
 `Examples.md` is six real runs of it. Both Sonnet 5 and Opus 5 hold the format; Opus runs
-about 30% longer, in more lines rather than longer ones.
+about 30% longer, in more lines rather than longer ones. Haiku 4.5 keeps the structure but
+breaks the line cap and drops the `(assume)` markers, which is why it is labelled weakest in
+the picker.
 
 ### 🔑 Providers
 
