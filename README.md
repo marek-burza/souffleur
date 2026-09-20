@@ -29,7 +29,7 @@ because that is the order the two are used in, and the choice is stored under
 `saveSettings()` therefore merges rather than replaces: the toolbar writes the prompt
 without holding the key, and the dialog writes the key without holding the prompt.
 
-There are two, and they differ in kind rather than in wording.
+There are three, and they differ in kind rather than in wording.
 
 **Generic** is the original: find the most recent question, answer it, `QUESTION` then
 `TL;DR` then bullets. It assumes the answer is the deliverable.
@@ -79,10 +79,33 @@ the previous version of the prompt:
 `AnswerPane` is a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences
 render literally and cost lines.
 
-`Examples.md` is six real runs of it. Both Sonnet 5 and Opus 5 hold the format; Opus runs
-about 30% longer, in more lines rather than longer ones. Haiku 4.5 keeps the structure but
-breaks the line cap and drops the `(assume)` markers, which is why it is labelled weakest in
-the picker.
+Both Sonnet 5 and Opus 5 hold the format; Opus runs about 30% longer, in more lines rather
+than longer ones. Haiku 4.5 keeps the structure but breaks the line cap and drops the
+`(assume)` markers, which is why it is labelled weakest in the picker.
+
+**System design** is the other interview in the loop: the classic distributed-systems round,
+not the ML one. It shares the glance-sheet rules above - the line cap, derived arithmetic,
+acronyms expanded, the deliverables override, the follow-up branch - and then adds what this
+round scores differently.
+
+The one that reshapes the whole answer is that **Google penalises naming the product instead
+of explaining the mechanism**, harder than any other panel. "A log with per-partition offsets
+so consumers replay independently" scores; "use Kafka" invites a question he cannot answer.
+The prompt states that rule before anything else and re-checks it at the end, and across
+twelve scraped questions it produced zero unaccompanied product names.
+
+The rest follows the round's rubric: drive the scope rather than wait for it, commit instead
+of saying "it depends", go three or four layers deep on two components rather than one layer
+on eight, and cover what breaks at ten times the load. `DEEP DIVE` therefore gets more lines
+than any other section, and `HARD PART` at the top names which two components it should be.
+
+Three things were measured across those twelve questions while tuning it, and two of them
+fought each other. Per-section line budgets tightened the sheet (46 lines to 44, and long
+lines from 3.2 per answer to 1.9) but squeezed out the acronym glosses, taking the worst
+answer from 4 bare acronyms to 10; exempting glosses from the budget did not fix it and cost
+arithmetic as well. The budgets were dropped, because an unexpandable acronym is the defect
+he actually gets caught by. What shipped averages 4.1 worked calculations and 1.8 bare
+acronyms per answer, with every answer covering failure modes, scaling limits and trade-offs.
 
 ### 🔑 Providers
 
