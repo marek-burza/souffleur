@@ -26,8 +26,6 @@ export function loadSettings (): Settings {
   }
 }
 
-// Merged over what is stored, so the toolbar can save the prompt without
-// knowing the key and the dialog can save the key without knowing the prompt.
 export function saveSettings (settings: Partial<Settings>): void {
   if (settings.apiKey !== undefined) {
     localStorage.setItem(API_KEY_STORAGE, settings.apiKey)

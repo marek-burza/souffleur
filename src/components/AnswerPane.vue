@@ -1,21 +1,31 @@
 <template>
-  <pre class="pane">{{ body }}</pre>
+  <pre ref="pane" class="pane">{{ body }}</pre>
 </template>
 
 <script lang="ts" setup>
   import type { Answer } from '@/lib/solver'
-  import { computed } from 'vue'
+  import { computed, useTemplateRef, watch } from 'vue'
 
-  const { answer, status } = defineProps<{
-    answer: Answer | undefined
+  const { answers, status } = defineProps<{
+    answers: Answer[]
     status: string
   }>()
 
+  const pane = useTemplateRef<HTMLElement>('pane')
+
   const body = computed(() => {
-    if (!answer) {
+    if (answers.length === 0) {
       return status
     }
-    return answer.question ? `${answer.question}\n\n${answer.text}` : answer.text
+    return answers
+      .map(answer => (answer.question ? `${answer.question}\n\n${answer.text}` : answer.text))
+      .join('\n\n---\n\n')
+  })
+
+  watch(() => answers.length, () => {
+    if (pane.value) {
+      pane.value.scrollTop = 0
+    }
   })
 </script>
 

@@ -59,7 +59,7 @@
             :transition="false"
             value="answer"
           >
-            <AnswerPane :answer="answer" :status="answerStatus" />
+            <AnswerPane :answers="answers" :status="answerStatus" />
           </v-tabs-window-item>
 
           <v-tabs-window-item
@@ -99,7 +99,7 @@
   const tab = ref('answer')
   const status = ref('Idle')
   const answerStatus = ref('No answer yet.')
-  const answer = ref<Answer>()
+  const answers = ref<Answer[]>([])
   const solving = ref(false)
   const capturing = ref(false)
   const screenshot = ref('')
@@ -201,17 +201,17 @@
 
     solving.value = true
     tab.value = 'answer'
-    answer.value = undefined
     answerStatus.value = 'Solving...'
     try {
-      answer.value = await solve(
+      answers.value.unshift(await solve(
         createModel(apiKey, model),
         resolvePrompt(prompt.value).text,
         text.value,
         screenshot.value,
-      )
+      ))
     } catch (error_) {
       answerStatus.value = `Failed due to ${message(error_)}`
+      status.value = `Solve failed due to ${message(error_)}`
     } finally {
       solving.value = false
     }
