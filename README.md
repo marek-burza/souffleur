@@ -29,7 +29,7 @@ because that is the order the two are used in, and the choice is stored under
 `saveSettings()` therefore merges rather than replaces: the toolbar writes the prompt
 without holding the key, and the dialog writes the key without holding the prompt.
 
-There are three, and they differ in kind rather than in wording.
+There are five, and they differ in kind rather than in wording.
 
 **Generic** is the original: find the most recent question, answer it, `QUESTION` then
 `TL;DR` then bullets. It assumes the answer is the deliverable.
@@ -106,6 +106,91 @@ answer from 4 bare acronyms to 10; exempting glosses from the budget did not fix
 arithmetic as well. The budgets were dropped, because an unexpandable acronym is the defect
 he actually gets caught by. What shipped averages 4.1 worked calculations and 1.8 bare
 acronyms per answer, with every answer covering failure modes, scaling limits and trade-offs.
+
+**Coding** is the 45-minute algorithms round, in Python. It differs from the other three in
+one way that changes everything: its output is executable, so it can be checked rather than
+judged. The harness extracts the `CODE` and `TEST` sections, concatenates them, and runs
+them. An answer only passes if the code the candidate would type survives the asserts the
+same sheet tells him to run.
+
+The round is scored on four axes and only one of them is the code in the editor at the end.
+The top Algorithms score needs several solutions laid out with their drawbacks before the
+optimal one is chosen, so one correct solution alone caps at a 3. Communication is scored
+separately, which is why the sheet has a `WALK` section of things to say while typing and
+why the code carries no comments. Skipping the clarifying questions is explicitly penalised,
+so they come first. Verification is what separates hire from strong hire.
+
+Four versions were measured over twelve scraped Google questions, three runs each, scored on
+whether the generated code passes its own asserts:
+
+| | runs passing | questions clean in all three runs |
+| --- | --- | --- |
+| tell it to self-execute the asserts | 83% | 8/12 |
+| plus: the stated examples are ground truth | 86% | 8/12 |
+| **plus: write the trace out, and prefer correct over clever** | **92%** | **10/12** |
+| plus: expected values as literals, not expressions | 89% | 8/12 |
+
+The third is what shipped, and the jump comes from making the verification visible. Telling
+the model to check its work changed little; making it *write out* the variable-by-variable
+trace of the worked example, as a `TRACE` line the candidate reads aloud anyway, is what
+moved the number. The same edit added a rule that correctness beats cleverness: if the
+optimal algorithm cannot be written and verified inside the sheet, write the clear one,
+state its complexity honestly, and offer the optimisation in `FOLLOW-UPS`.
+
+The fourth version tested a real failure it had seen - an assert reading `== (4+4)*4` whose
+unevaluated arithmetic hid that those elements sit at depth three - by demanding plain
+literals. It scored worse and was dropped.
+
+**ML/AI coding** is the other 45-minute coding round, and it is not the algorithms one. It
+asks for a machine learning primitive implemented from scratch, so it is scored on whether
+the maths is right, whether the code is vectorised, whether it is numerically stable, and
+whether the shapes are named. Looping over rows of data in Python is the defect this round
+exists to find, so the prompt permits loops only over training iterations, layers or k.
+PyTorch is the default, because that is what was named when this loop was described, with
+NumPy for the classical primitives that have no gradients in them - k-means, k-nearest
+neighbours, the area under the curve. Either way the rule that matters is that it never
+calls the library function that is the answer: "implement attention" is not
+`torch.nn.MultiheadAttention`. Where the task wants a backward pass it derives the gradient
+by hand and then checks it against `torch.autograd.grad`, which is the strongest move
+available in this round - it shows both that he knows the maths and that he knows how to
+prove he got it right.
+
+Measured over the same tasks, the framework rule changes the wording rather than the output:
+both the NumPy-default and PyTorch-default versions score 90%, and both route PyTorch to the
+training-loop and manual-backward tasks and NumPy to the thirteen classical ones. The task
+decides. The rule still matters for the tasks the eval set does not contain.
+
+The harness runs the generated code through `uv run python`, which has NumPy and PyTorch,
+and additionally checks for loops over data, for a missing max-subtraction before an
+exponential, and for an unguarded logarithm.
+
+Five versions were measured over thirteen tasks, three runs each:
+
+| | runs passing | tasks clean in all three |
+| --- | --- | --- |
+| first draft | 23% | - |
+| plus: CODE holds Python only, imports at module scope | 62% | - |
+| plus: verify by property, not by hand-computed floats | 77% | 6/13 |
+| **plus: assert what is invariant when the answer is not unique** | **90%** | **10/13** |
+| plus: re-read the signature before the first assert | 87% | 10/13 |
+
+Two of those steps carry the weight. The first draft failed mostly on structure: a prose
+line about shapes sitting inside `CODE` is a syntax error, and an `import numpy as np`
+written inside the function leaves the module-level asserts unable to see it. Both are
+one-line fixes worth forty points.
+
+The second is a lesson about what verification means here. Hand-computed expectations work
+for the algorithms round and fail completely for this one, because nobody can compute in
+their head what gradient descent returns after a hundred steps or where a centroid
+converges. Every remaining failure was of that shape. Replacing them with the checks an ML
+engineer actually uses - cross-check the vectorised version against a four-line naive loop,
+finite-difference the gradients, assert the closed-form special case - fixed the tests and
+is better interview advice than what it replaced. The further step of asserting what is
+invariant when the answer is not unique, since cluster labels permute and neighbours tie,
+took it to 90%.
+
+k-means stays the weak spot in every version: its assertions depend on initialisation and on
+which label a cluster happens to receive, and it fails about a third of the time.
 
 ### 🔑 Providers
 
