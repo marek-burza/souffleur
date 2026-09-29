@@ -245,7 +245,7 @@ the primary metric, and the obvious metric it replaces
 the paradigm pick, its reason, and the condition under which the rejected option wins,
   and the mechanism that makes the pick work
 where the data/labels come from and the split that prevents the leak, naming the leak,
-  and features engineered
+  and data features engineered and fed into the model
 the serving move that buys the latency or the cost
 the hard constraint or the abstain rule
 what kills it - the failure that ends adoption, last, alone, in two sentences
