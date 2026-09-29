@@ -47,19 +47,42 @@
 
         <div class="text-xs status controls" :title="status">{{ status }}</div>
 
-        <v-tabs v-model="tab" class="controls">
-          <v-tab text="Answer" value="answer" />
-          <v-tab text="Transcript" value="transcript" />
-        </v-tabs>
+        <div class="flex items-center controls">
+          <v-tabs v-model="tab">
+            <v-tab text="Answers" value="answers" />
+            <v-tab text="Transcript" value="transcript" />
+          </v-tabs>
+
+          <v-btn
+            v-if="tab === 'transcript'"
+            class="ml-auto"
+            :disabled="isEmpty"
+            prepend-icon="mdi-download"
+            size="small"
+            text="Download"
+            variant="text"
+            @click="download"
+          />
+
+          <v-btn
+            :class="{ 'ml-auto': tab !== 'transcript' }"
+            :disabled="tab === 'answers' ? answers.length === 0 : isEmpty"
+            prepend-icon="mdi-delete-outline"
+            size="small"
+            text="Clear"
+            variant="text"
+            @click="onClear"
+          />
+        </div>
 
         <v-tabs-window v-model="tab" class="content">
           <v-tabs-window-item
             class="h-full"
             :reverse-transition="false"
             :transition="false"
-            value="answer"
+            value="answers"
           >
-            <AnswerPane :answers="answers" :status="answerStatus" />
+            <AnswersPane :answers="answers" :status="answersStatus" />
           </v-tabs-window-item>
 
           <v-tabs-window-item
@@ -68,11 +91,7 @@
             :transition="false"
             value="transcript"
           >
-            <TranscriptPane
-              v-model="text"
-              :error="error"
-              @download="download"
-            />
+            <TranscriptPane v-model="text" :error="error" />
           </v-tabs-window-item>
         </v-tabs-window>
       </div>
@@ -84,7 +103,7 @@
 
 <script lang="ts" setup>
   import { ref, watch } from 'vue'
-  import AnswerPane from '@/components/AnswerPane.vue'
+  import AnswersPane from '@/components/AnswersPane.vue'
   import CameraPreview from '@/components/CameraPreview.vue'
   import SettingsDialog from '@/components/SettingsDialog.vue'
   import TranscriptPane from '@/components/TranscriptPane.vue'
@@ -92,24 +111,29 @@
   import { useRecognition } from '@/composables/useRecognition'
   import { useTranscript } from '@/composables/useTranscript'
   import { PROMPTS, resolvePrompt } from '@/lib/prompt'
+  import { loadAnswers, saveAnswers } from '@/lib/session'
   import { loadSettings, saveSettings } from '@/lib/settings'
   import { type Answer, createModel, solve } from '@/lib/solver'
 
+  const NO_ANSWERS = 'No answers yet.'
+
   const dialog = ref(true)
-  const tab = ref('answer')
+  const tab = ref('answers')
   const status = ref('Idle')
-  const answerStatus = ref('No answer yet.')
-  const answers = ref<Answer[]>([])
+  const answersStatus = ref(NO_ANSWERS)
+  const answers = ref<Answer[]>(loadAnswers())
   const solving = ref(false)
   const capturing = ref(false)
   const screenshot = ref('')
   const prompt = ref(loadSettings().prompt)
 
   const { cameras, selected, video, listCameras, startCamera, capture } = useCamera()
-  const { text, addLine, setText, download } = useTranscript()
+  const { text, isEmpty, addLine, setText, clear, download } = useTranscript()
   const recognition = useRecognition(addLine)
 
   const error = recognition.error
+
+  watch(answers, saveAnswers, { deep: true })
 
   watch(error, message_ => {
     if (message_) {
@@ -171,6 +195,15 @@
     }
   }
 
+  function onClear () {
+    if (tab.value === 'answers') {
+      answers.value = []
+      answersStatus.value = NO_ANSWERS
+    } else {
+      clear()
+    }
+  }
+
   function onPromptChange () {
     saveSettings({ prompt: prompt.value })
   }
@@ -200,8 +233,8 @@
     }
 
     solving.value = true
-    tab.value = 'answer'
-    answerStatus.value = 'Solving...'
+    tab.value = 'answers'
+    answersStatus.value = 'Solving...'
     try {
       answers.value.unshift(await solve(
         createModel(apiKey, model),
@@ -210,7 +243,7 @@
         screenshot.value,
       ))
     } catch (error_) {
-      answerStatus.value = `Failed due to ${message(error_)}`
+      answersStatus.value = `Failed due to ${message(error_)}`
       status.value = `Solve failed due to ${message(error_)}`
     } finally {
       solving.value = false

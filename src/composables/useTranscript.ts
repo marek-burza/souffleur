@@ -2,13 +2,16 @@
  * composables/useTranscript.ts
  *
  * The transcript with one line per utterance, newest last.
- * Held in memory, editable in place, and offered as a download.
+ * Kept in LocalStorage, editable in place, and offered as a download.
  */
 
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { loadTranscript, saveTranscript } from '@/lib/session'
 
 export function useTranscript () {
-  const text = ref('')
+  const text = ref(loadTranscript())
+
+  watch(text, saveTranscript)
 
   const isEmpty = computed(() => text.value.trim().length === 0)
 

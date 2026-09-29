@@ -1,16 +1,5 @@
 <template>
-  <div class="flex flex-col h-full gap-3">
-    <div>
-      <v-btn
-        :disabled="isEmpty"
-        prepend-icon="mdi-download"
-        size="small"
-        text="Download transcript"
-        variant="tonal"
-        @click="emit('download')"
-      />
-    </div>
-
+  <div class="flex flex-col h-full">
     <textarea
       ref="area"
       v-model="text"
@@ -22,7 +11,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, useTemplateRef, watch } from 'vue'
+  import { nextTick, useTemplateRef, watch } from 'vue'
 
   const { error } = defineProps<{
     error: string
@@ -30,11 +19,7 @@
 
   const text = defineModel<string>({ required: true })
 
-  const emit = defineEmits<{ download: [] }>()
-
   const area = useTemplateRef<HTMLTextAreaElement>('area')
-
-  const isEmpty = computed(() => text.value.trim().length === 0)
 
   // Recognition appends while the user may be typing; rewriting the textarea
   // value drops the caret to the end, so put it back where it was.

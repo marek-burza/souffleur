@@ -12,13 +12,19 @@ plain values down; the child components hold no session state.
 ```text
 useRecognition(addLine) ──> useTranscript ──> TranscriptPane (editable)
 useCamera ──> CameraPreview + capture() ──┐
-prompt picker ──> lib/prompt ─────────────┼─> lib/solver solve() ──> AnswerPane
+prompt picker ──> lib/prompt ─────────────┼─> lib/solver solve() ──> AnswersPane
 SettingsDialog (key, model, file upload) ─┘
 ```
 
 Two transcription paths, one `addLine` contract: each emits a line per utterance
 and neither knows about the other. `App.vue` stops a running live session before
 starting anything else, since both paths want the same microphone.
+
+The transcript and the answers survive a reload: `src/lib/session.ts` keeps them
+under `souffleur.transcript` and `souffleur.answers`, written on every change. The
+`Clear` button at the end of the tab row empties whichever tab is showing, and
+`Download` beside it appears on the transcript tab only. Both sit there rather
+than in the pane so they cost no vertical space.
 
 ### 📝 Prompts
 
@@ -76,7 +82,7 @@ the previous version of the prompt:
 | answers with no worked arithmetic | 12/13 | 1/13 |
 | answers carrying more than three bare acronyms | 9/13 | 1/13 |
 
-`AnswerPane` is a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences
+`AnswersPane` is a `<pre>` at 9pt, so the prompt bans markdown outright - asterisks and fences
 render literally and cost lines.
 
 Both Sonnet 5 and Opus 5 hold the format; Opus runs about 30% longer, in more lines rather
