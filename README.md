@@ -90,28 +90,53 @@ than longer ones. Haiku 4.5 keeps the structure but breaks the line cap and drop
 `(assume)` markers, which is why it is labelled weakest in the picker.
 
 **System design** is the other interview in the loop: the classic distributed-systems round,
-not the ML one. It shares the glance-sheet rules above - the line cap, derived arithmetic,
-acronyms expanded, the deliverables override, the follow-up branch - and then adds what this
-round scores differently.
+not the ML one. It shares the glance-sheet format above - plain text, lines under 20 words,
+acronyms expanded, the deliverables override, the follow-up branch - but it was rebuilt
+around a different failure than the ML prompt's.
 
-The one that reshapes the whole answer is that **Google penalises naming the product instead
-of explaining the mechanism**, harder than any other panel. "A log with per-partition offsets
-so consumers replay independently" scores; "use Kafka" invites a question he cannot answer.
-The prompt states that rule before anything else and re-checks it at the end, and across
-twelve scraped questions it produced zero unaccompanied product names.
+**The first answer has to hold the whole design.** Practising "design a dynamic feature flag
+system", the earlier version produced 47-line sheets that were long and still missed what
+the interviewer was waiting for: deterministic hashing was there, but the properties it buys
+(stable groups with nothing stored, a clean ramp where the 10% group is still in at 20%, no
+work when users sign up or flags are created, independent groups through a per-flag salt)
+were buried or absent, and the in-process evaluation, the per-service subscription, the
+reconnect jitter, the flag record's fields and the kill switch's priority arrived only when
+probed, or not at all. Every probe needed to extract something is scored against him.
 
-The rest follows the round's rubric: drive the scope rather than wait for it, commit instead
-of saying "it depends", go three or four layers deep on two components rather than one layer
-on eight, and cover what breaks at ten times the load. `DEEP DIVE` therefore gets more lines
-than any other section, and `HARD PART` at the top names which two components it should be.
+So the prompt now carries a checklist of what strong answers contain and weak ones bury: the
+expected mechanism named against the naive design it replaces (the naive design is exactly
+what he gets pushed back on), that mechanism's properties one per line, the hot path and
+where its data sits, control plane against data plane, the core record with every field,
+the fallback chain down to a compiled-in default, the hot spot, the self-inflicted failure of
+a bad change propagating as fast as a good one, and the governance the problem implies.
 
-Three things were measured across those twelve questions while tuning it, and two of them
-fought each other. Per-section line budgets tightened the sheet (46 lines to 44, and long
-lines from 3.2 per answer to 1.9) but squeezed out the acronym glosses, taking the worst
-answer from 4 bare acronyms to 10; exempting glosses from the budget did not fix it and cost
-arithmetic as well. The budgets were dropped, because an unexpandable acronym is the defect
-he actually gets caught by. What shipped averages 4.1 worked calculations and 1.8 bare
-acronyms per answer, with every answer covering failure modes, scaling limits and trade-offs.
+**The lines come from dropping the estimates.** Capacity arithmetic was the old version's
+signature, and it does not survive a practice interview: the numbers depend on what the
+interviewer says, and they cost lines the design needs. A number now appears only where it is
+a requirement - a latency target, a propagation deadline, a size that decides whether
+something fits in memory. The cap is 24 lines, with follow-ups at 8.
+
+**Google penalises naming the product instead of explaining the mechanism**, harder than any
+other panel. "A log with per-partition offsets so consumers replay independently" scores;
+"use Kafka" invites a question he cannot answer. That rule is kept from the first version.
+
+Measured over six classic questions (feature flags, rate limiter, URL shortener, distributed
+cache, home timeline, job scheduler), three runs each on Sonnet 5, each answer graded by
+Opus 5 against a per-question rubric of what a strong answer states:
+
+| | before | after |
+| --- | --- | --- |
+| lines per answer | 47 | 24 |
+| words per answer | 659 | 372 |
+| feature-flag rubric covered | 63% | 91% |
+| all six rubrics covered | 78% | 76% |
+| bare acronyms per answer | 3.2 | 0.4 |
+| follow-up length, words | 215-282 | 109-174 |
+
+Half the words for the same coverage overall, and the feature-flag gap closed. What the other
+five lose is peripheral - a 429 response, cursor pagination, stampede protection. Naming the
+checklist's categories made the model echo them as line prefixes ("Hot spot:", "Naive
+design:"), which pushed lines past 20 words, so the prompt forbids the labels by name.
 
 **Coding** is the 45-minute algorithms round, in Python. It differs from the other three in
 one way that changes everything: its output is executable, so it can be checked rather than
