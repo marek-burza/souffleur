@@ -24,6 +24,10 @@ install -m 0700 -d $HOME/.ansible/tmp
 sudo ansible-playbook -i "localhost," --connection=local playbook.yaml
 ```
 
+## The `fake-interview-malware-research` Skill
+
+Caution: Put it at user level so it runs from the home directory, never from inside the repo it's checking - that way the repo's `.claude/`, `.mcp.json` and `CLAUDE.md` never get loaded.
+
 ## To Do
 
 - How to secure anything - https://github.com/veeral-patel/how-to-secure-anything
