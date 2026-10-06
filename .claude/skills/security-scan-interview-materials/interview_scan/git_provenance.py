@@ -181,7 +181,7 @@ def check_commit_dates(ctx: ScanContext, rel: str, commits: list[Commit]) -> Non
 def check_free_mail_authors(ctx: ScanContext, rel: str, commits: list[Commit]) -> None:
     freemail = set(ctx.config.section("git")["freemail_domains"])
     emails = {e.lower() for c in commits for e in (c.author_email, c.committer_email)}
-    personal = sorted(e for e in emails if e.rsplit("@", 1)[-1] in freemail or e.endswith("users.noreply.github.com"))
+    personal = sorted(e for e in emails if e.rsplit("@", 1)[-1] in freemail)
     if personal:
         ctx.report("GIT-FREEMAIL", Severity.LOW, "Commits authored from personal or free-mail addresses", path=rel,
                    snippet=safe_for_display(", ".join(personal[:10])), category="provenance")
