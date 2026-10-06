@@ -1,8 +1,8 @@
 ---
-- name: git - Installation
-  apt:
+- name: Git - Installation
+  ansible.builtin.apt:
     pkg:
       - git
       - git-lfs
     state: latest
-    update_cache: yes
+    update_cache: true

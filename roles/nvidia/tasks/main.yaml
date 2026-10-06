@@ -1,96 +1,96 @@
 ---
 - name: NVIDIA - Kernel
-  command: uname -r
-  register: uname_kernel_version_output
+  ansible.builtin.command: uname -r
+  register: nvidia_uname_kernel_version_output
 
 - name: NVIDIA - Prerequisites
-  apt:
+  ansible.builtin.apt:
     pkg:
       - build-essential
       - ca-certificates
       - gnupg2
-      - linux-headers-{{ uname_kernel_version_output.stdout }}
+      - linux-headers-{{ nvidia_uname_kernel_version_output.stdout }}
     state: latest
-    update_cache: yes
+    update_cache: true
 
 - name: NVIDIA - Architecture
-  command: uname -m
-  register: uname_architecture_output
+  ansible.builtin.command: uname -m
+  register: nvidia_uname_architecture_output
 
 - name: NVIDIA - Distribution
-  command: /bin/sh -c '. /etc/os-release && echo $ID | tr -d .'
-  register: os_distribution_output
+  ansible.builtin.command: /bin/sh -c '. /etc/os-release && echo $ID | tr -d .'
+  register: nvidia_os_distribution_output
 
 - name: NVIDIA - Release
-  command: /bin/sh -c '. /etc/os-release && echo $VERSION_ID | tr -d .'
-  register: os_release_output
+  ansible.builtin.command: /bin/sh -c '. /etc/os-release && echo $VERSION_ID | tr -d .'
+  register: nvidia_os_release_output
 
 - name: NVIDIA - Driver Version
-  command: /bin/sh -c "apt list nvidia-driver* 2> /dev/null | grep -oP 'nvidia-driver-\\K\\d+' | sort | tail -1"
+  ansible.builtin.command: /bin/sh -c "apt list nvidia-driver* 2> /dev/null | grep -oP 'nvidia-driver-\\K\\d+' | sort | tail -1"
   register: nvidia_driver_version
 
 - name: NVIDIA - CUDA Driver
-  apt:
+  ansible.builtin.apt:
     pkg:
       - nvidia-driver-{{ nvidia_driver_version.stdout }}-open
     state: latest
-    update_cache: yes
+    update_cache: true
 
 - name: NVIDIA - CUDA Driver Check
-  command: nvidia-smi
+  ansible.builtin.command: nvidia-smi
   register: nvidia_smi_check
   failed_when: false
   changed_when: false
 
 - name: NVIDIA - Container Toolkit GPG Temporary
-  tempfile:
+  ansible.builtin.tempfile:
     state: file
     prefix: container-toolkit.
     suffix: .key
-  register: container_toolkit_key
+  register: nvidia_container_toolkit_key
 
 - name: NVIDIA - Container Toolkit GPG
-  get_url:
+  ansible.builtin.get_url:
     url: https://nvidia.github.io/libnvidia-container/gpgkey
-    dest: "{{ container_toolkit_key.path }}"
+    dest: "{{ nvidia_container_toolkit_key.path }}"
     force: true
     mode: "0600"
 
 - name: NVIDIA - Container Toolkit GPG Dearmor
-  command: "gpg -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg --batch --yes --dearmor {{ container_toolkit_key.path }}"
+  ansible.builtin.command: "gpg -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg --batch --yes --dearmor {{ nvidia_container_toolkit_key.path }}"
 
 - name: NVIDIA - Container Toolkit GPG cleanup
-  file:
-    path: "{{ container_toolkit_key.path }}"
+  ansible.builtin.file:
+    path: "{{ nvidia_container_toolkit_key.path }}"
     state: absent
 
 - name: NVIDIA - Container Toolkit Repository
-  apt_repository:
+  ansible.builtin.apt_repository:
     repo: "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /"
     state: present
 
 - name: NVIDIA - Container Toolkit Upgrade
-  apt:
-    update_cache: yes
+  ansible.builtin.apt:
+    update_cache: true
     upgrade: full
 
 - name: NVIDIA - Container Toolkit
-  apt:
+  ansible.builtin.apt:
     pkg:
       - nvidia-container-toolkit
       - nvidia-container-toolkit-base
       - libnvidia-container-tools
       - libnvidia-container1
     state: latest
-    update_cache: yes
+    update_cache: true
 
 - name: NVIDIA - Container Toolkit Podman Note
-  debug:
+  ansible.builtin.debug:
     msg: "Re-run provisioning after a reboot to configure NVIDIA Container Toolkit with Podman"
   when: nvidia_smi_check.rc != 0
 
 - name: NVIDIA - Container Toolkit Podman
-  command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+  ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
   when: nvidia_smi_check.rc == 0
 
 # - NVIDIA CUDA Installation Guide for Linux: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html

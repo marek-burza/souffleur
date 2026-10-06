@@ -1,7 +1,7 @@
 ---
 - name: Tools
-  apt:
+  ansible.builtin.apt:
     pkg:
       - fzf
     state: latest
-    update_cache: yes
+    update_cache: true

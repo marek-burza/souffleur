@@ -1,20 +1,20 @@
 ---
 - name: Podman - Installation
-  apt:
+  ansible.builtin.apt:
     pkg:
       - podman
       - podman-docker
     state: latest
-    update_cache: yes
+    update_cache: true
 
 - name: Podman - Docker Hub
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/containers/registries.conf
     line: 'unqualified-search-registries = ["docker.io"]'
     state: present
 
 - name: Podman - Prune
-  cron:
+  ansible.builtin.cron:
     name: podman-prune
     hour: "0"
     minute: "0"

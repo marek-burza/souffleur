@@ -1,10 +1,10 @@
 ---
 - name: Firewall - Package
-  apt:
+  ansible.builtin.apt:
     pkg:
       - ufw
     state: latest
-    update_cache: yes
+    update_cache: true
 
 - name: Firewall - Enabled
   community.general.ufw:

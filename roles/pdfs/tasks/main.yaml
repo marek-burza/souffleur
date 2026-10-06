@@ -1,6 +1,6 @@
 ---
-- name: pdfs - Packages
-  apt:
+- name: PDFs - Packages
+  ansible.builtin.apt:
     pkg:
       - enscript
       - ghostscript
@@ -8,10 +8,10 @@
       - poppler-utils
       - qpdf
     state: latest
-    update_cache: yes
+    update_cache: true
 
-- name: pdfs - Scripts
-  copy:
+- name: PDFs - Scripts
+  ansible.builtin.copy:
     src: "{{ role_path }}/files/"
     dest: /usr/local/bin/
     mode: "0755"
