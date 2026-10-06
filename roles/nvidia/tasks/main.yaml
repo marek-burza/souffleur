@@ -54,6 +54,7 @@
     url: https://nvidia.github.io/libnvidia-container/gpgkey
     dest: "{{ container_toolkit_key.path }}"
     force: true
+    mode: "0600"
 
 - name: NVIDIA - Container Toolkit GPG Dearmor
   command: "gpg -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg --batch --yes --dearmor {{ container_toolkit_key.path }}"

@@ -17,6 +17,7 @@
     url: https://download-cdn.jetbrains.com/fonts/JetBrainsMono-2.304.zip
     dest: "{{ jetbrains_mono_zip.path }}"
     force: true
+    mode: "0600"
 
 - name: Fonts - JetBrains Mono installation
   command: unzip -f -j "{{ jetbrains_mono_zip.path }}" "fonts/ttf/*" -d /usr/local/share/fonts/jetbrains_mono
@@ -44,6 +45,7 @@
     url: https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip
     dest: "{{ dejavu_zip.path }}"
     force: true
+    mode: "0600"
 
 - name: Fonts - DejaVu installation
   command: unzip -f -j "{{ dejavu_zip.path }}" "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Oblique.ttf" "dejavu-fonts-ttf-2.37/ttf/DejaVuSans-BoldOblique.ttf" -d /usr/local/share/fonts/dejavu
