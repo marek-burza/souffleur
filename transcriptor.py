@@ -3,7 +3,6 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "librosa",
 #     "numpy",
 #     "pillow",
 #     "pytest",
@@ -35,10 +34,16 @@ import numpy as np
 import torch
 import typer
 from PIL import ImageGrab
-from transformers import CohereAsrForConditionalGeneration, CohereAsrProcessor
+from transformers import (
+    WhisperForConditionalGeneration,
+    WhisperProcessor,
+    pipeline,
+)
 from transformers.utils import logging as transformers_logging
 
 
+warnings.filterwarnings('ignore', message='A custom logits processor of type')
+warnings.filterwarnings('ignore', message='You seem to be using the pipelines sequentially on GPU')
 warnings.filterwarnings('ignore', message='You are sending unauthenticated requests')
 transformers_logging.set_verbosity_error()
 logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
@@ -56,34 +61,38 @@ class Source(str, enum.Enum):
     ALL = 'all'
 
 
-# Gated on the Hub: accept its terms on the model page and set HF_TOKEN.
-COHERE_HUGGINGFACE_ID = 'CohereLabs/cohere-transcribe-03-2026'
-# Without a language the model guesses one per segment, and on short, quiet segments it
-# guesses Portuguese or Arabic and can loop.
-LANGUAGE = 'en'
-MAX_NEW_TOKENS = 256
+WHISPER_HUGGINGFACE_ID = 'openai/whisper-large-v3'
 
 
-class CohereTranscriber:
+class WhisperTranscriber:
     def __init__(self, model_id: str, device: str, dtype: torch.dtype) -> None:
-        self._device = device
-        self._dtype = dtype
-        self._processor = CohereAsrProcessor.from_pretrained(model_id)
-        self._model = CohereAsrForConditionalGeneration.from_pretrained(model_id, dtype=dtype).to(device).eval()
+        asr_model = WhisperForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=dtype, low_cpu_mem_usage=True, use_safetensors=True
+        ).to(device)
+        processor = WhisperProcessor.from_pretrained(model_id)
+        self._pipe = pipeline(
+            'automatic-speech-recognition',
+            model=asr_model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            dtype=dtype,
+            device=device,
+            batch_size=1,
+        )
+        self._pipe.model.generation_config.language = 'en'
+        self._pipe.model.generation_config.task = 'transcribe'
+        self._pipe.model.generation_config.no_repeat_ngram_size = 3
+        self._pipe.model.generation_config.forced_decoder_ids = None
 
-    @torch.inference_mode()
     def __call__(self, audio: np.ndarray) -> str:
-        inputs = self._processor(audio, sampling_rate=SAMPLE_RATE, return_tensors='pt', language=LANGUAGE)
-        inputs.to(self._device, dtype=self._dtype)
-        outputs = self._model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS)
-        return self._processor.decode(outputs, skip_special_tokens=True)[0].strip()
+        return self._pipe(audio)['text'].strip()
 
 
-def load_transcriber() -> CohereTranscriber:
+def load_transcriber() -> WhisperTranscriber:
     print('Loading model...')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
-    return CohereTranscriber(COHERE_HUGGINGFACE_ID, device, dtype)
+    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+    return WhisperTranscriber(WHISPER_HUGGINGFACE_ID, device, dtype)
 
 
 @dataclasses.dataclass
@@ -313,7 +322,7 @@ def default_speaker_device(sources: list[Device], override: int | None) -> str:
 
 
 def transcribe_worker(
-    transcribe: CohereTranscriber,
+    transcribe: WhisperTranscriber,
     multi_source: bool,
     audio: queue.Queue[AudioChunk | None],
     transcript: TranscriptFile,
@@ -617,7 +626,7 @@ if __name__ == '__main__':
     app()
 
 
-# Tests - run with: uv run --with pytest --with numpy --with pillow --with torch --with transformers --with typer --with librosa python -m pytest transcriptor.py -v
+# Tests - run with: uv run --with pytest --with numpy --with pillow --with torch --with transformers --with typer python -m pytest transcriptor.py -v
 class TestVadAccumulator:
     _FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000  # 320 samples per 20ms frame
 
@@ -748,7 +757,6 @@ class TestVadAccumulator:
         assert kept / SAMPLE_RATE > 58
 
 
-# The model is gated - accept its terms on the Hub and export HF_TOKEN first.
 # Frequently used: uv run transcriptor.py live --source all
 # Copy to the root of Google Drive as it records: uv run transcriptor.py live --source all --sync
 # Pick devices: uv run transcriptor.py devices, then live --microphone-device N --speaker-device M
