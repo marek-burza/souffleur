@@ -13,7 +13,7 @@
 # ]
 # ///
 # Records a live transcript of the microphone and/or speaker audio to a text file, and
-# refreshes a screenshot file at an interval.
+# refreshes a screenshot file at an interval, optionally copying both to Google Drive.
 
 import collections
 import dataclasses
@@ -393,6 +393,58 @@ def screen_worker(
         exit.wait(interval)
 
 
+RCLONE_REMOTE = 'transcriptor'
+# drive.file: rclone sees only the files it uploaded itself, not the rest of the Drive.
+RCLONE_DRIVE_SCOPE = 'drive.file'
+# The last sync pass runs on Ctrl+C, and an upload takes longer than the 1 s other threads get.
+SYNC_STOP_TIMEOUT = 15.0
+
+
+def ensure_rclone_remote() -> None:
+    remotes = subprocess.run(['rclone', 'listremotes'], capture_output=True, text=True, check=True).stdout.split()
+    if f'{RCLONE_REMOTE}:' in remotes:
+        return
+    print(f'No rclone remote "{RCLONE_REMOTE}", authorising Google Drive in the browser...')
+    subprocess.run(['rclone', 'config', 'create', RCLONE_REMOTE, 'drive', f'scope={RCLONE_DRIVE_SCOPE}'], check=True)
+
+
+def upload(path: Path) -> bool:
+    result = subprocess.run(
+        ['rclone', 'copyto', str(path), f'{RCLONE_REMOTE}:{path.name}'],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        print(f'Sync error for {path.name}: {result.stderr.strip().splitlines()[-1:]}')
+    return result.returncode == 0
+
+
+def modification(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+def sync_pass(paths: list[Path], synced: dict[Path, tuple[int, int]]) -> None:
+    for path in paths:
+        state = modification(path)
+        if state is not None and synced.get(path) != state and upload(path):
+            synced[path] = state
+
+
+def sync_worker(
+    paths: list[Path],
+    exit: threading.Event,
+    interval: float,
+) -> None:
+    synced: dict[Path, tuple[int, int]] = {}
+    while not exit.wait(interval):
+        sync_pass(paths, synced)
+    sync_pass(paths, synced)
+
+
 app = typer.Typer(no_args_is_help=True)
 
 
@@ -444,8 +496,20 @@ def live(
         '--screenshot-interval',
         help='Seconds between screenshots.',
     ),
+    sync: bool = typer.Option(
+        False,
+        '--sync',
+        help='Copy the transcript and screenshot to the root of Google Drive through rclone. The first run signs in through the browser.',
+    ),
+    sync_interval: float = typer.Option(
+        3.0,
+        '--sync-interval',
+        help='Seconds between sync passes; each pass uploads only the files that changed.',
+    ),
 ) -> None:
     """Transcribe live audio and capture screenshots at an interval."""
+    if sync:
+        ensure_rclone_remote()
     sources = pulse_sources()
     exit = threading.Event()
     audio: queue.Queue[AudioChunk | None] = queue.Queue()
@@ -477,6 +541,17 @@ def live(
             args=(screenshot_path, exit, screenshot_interval),
             daemon=True,
         ))
+    sync_thread: threading.Thread | None = None
+    if sync:
+        synced_paths = ([transcript_path] if capture_devices else []) + (
+            [screenshot_path] if source in [Source.SCREEN, Source.ALL] else []
+        )
+        sync_thread = threading.Thread(
+            target=sync_worker,
+            args=(synced_paths, exit, sync_interval),
+            daemon=True,
+        )
+        threads.append(sync_thread)
 
     print('Running... (Ctrl+C to exit)')
     for thread in threads:
@@ -489,7 +564,7 @@ def live(
         print('\nStopping...')
         exit.set()
         for thread in threads:
-            thread.join(timeout=1)
+            thread.join(timeout=SYNC_STOP_TIMEOUT if thread is sync_thread else 1)
     finally:
         audio.put(None)
 
@@ -536,7 +611,7 @@ if __name__ == '__main__':
     app()
 
 
-# Tests - run with: uv run --with pytest --with numpy --with pillow --with torch --with transformers --with typer python -m pytest souffleur.py -v
+# Tests - run with: uv run --with pytest --with numpy --with pillow --with torch --with transformers --with typer --with librosa python -m pytest transcriptor.py -v
 class TestVadAccumulator:
     _FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS // 1000  # 320 samples per 20ms frame
 
@@ -668,6 +743,7 @@ class TestVadAccumulator:
 
 
 # The model is gated - accept its terms on the Hub and export HF_TOKEN first.
-# Frequently used: uv run souffleur.py live --source all
-# Pick devices: uv run souffleur.py devices, then live --microphone-device N --speaker-device M
-# Transcribe a file: uv run souffleur.py recorded recording.m4a --transcript recording.txt
+# Frequently used: uv run transcriptor.py live --source all
+# Copy to the root of Google Drive as it records: uv run transcriptor.py live --source all --sync
+# Pick devices: uv run transcriptor.py devices, then live --microphone-device N --speaker-device M
+# Transcribe a file: uv run transcriptor.py recorded recording.m4a --transcript recording.txt
