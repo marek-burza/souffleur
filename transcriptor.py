@@ -14,6 +14,12 @@
 # ///
 # Records a live transcript of the microphone and/or speaker audio to a text file, and
 # refreshes a screenshot file at an interval, optionally copying both to Google Drive.
+# - Generic interview - https://claude.ai/new?q=%2Fig
+# - Coding interview - https://claude.ai/new?q=%2Fic
+# - System design interview - https://claude.ai/new?q=%2Fisd
+# - ML/AI coding interview - https://claude.ai/new?q=%2Fimlc
+# - ML/AI architecture interview - https://claude.ai/new?q=%2Fimla
+# - ML/AI architecture interview (short) - https://claude.ai/new?q=%2Fimlas
 
 import collections
 import dataclasses

@@ -35,6 +35,18 @@ because that is the order the two are used in, and the choice is stored under
 `saveSettings()` therefore merges rather than replaces: the toolbar writes the prompt
 without holding the key, and the dialog writes the key without holding the prompt.
 
+Each prompt also exists as an agent skill under `.claude/skills/`, named for the round:
+`ig` (Generic), `imla` (ML/AI architecture), `imlas` (its short variant), `isd` (System
+design), `ic` (Coding) and `imlc` (ML/AI coding). They are copies, not imports, so an edit
+to a prompt has to be made in both places. The text is the same except that a skill calls
+the round a mock interview rather than a live one, and except for its input:
+instead of an embedded transcript and an attached screen capture, a skill fetches
+`transcript.txt` and `screenshot.png` from whatever cloud drive is connected, where
+`transcriptor.py live --sync` keeps them current, or reads them from the local disk when
+they are there. Claude Code picks the skills up from that directory as they are, as
+`/ig` and so on; for claude.ai, zip a skill's folder and upload it in the skill settings,
+and it runs when the message is its name.
+
 There are five, and they differ in kind rather than in wording.
 
 **Generic** is the original: find the most recent question, answer it, `QUESTION` then
