@@ -3,6 +3,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
+#     "librosa",
 #     "numpy",
 #     "pillow",
 #     "pytest",
@@ -28,16 +29,10 @@ import numpy as np
 import torch
 import typer
 from PIL import ImageGrab
-from transformers import (
-    WhisperForConditionalGeneration,
-    WhisperProcessor,
-    pipeline,
-)
+from transformers import CohereAsrForConditionalGeneration, CohereAsrProcessor
 from transformers.utils import logging as transformers_logging
 
 
-warnings.filterwarnings('ignore', message='A custom logits processor of type')
-warnings.filterwarnings('ignore', message='You seem to be using the pipelines sequentially on GPU')
 warnings.filterwarnings('ignore', message='You are sending unauthenticated requests')
 transformers_logging.set_verbosity_error()
 logging.getLogger('huggingface_hub').setLevel(logging.ERROR)
@@ -55,38 +50,34 @@ class Source(str, enum.Enum):
     ALL = 'all'
 
 
-WHISPER_HUGGINGFACE_ID = 'openai/whisper-large-v3'
+# Gated on the Hub: accept its terms on the model page and set HF_TOKEN.
+COHERE_HUGGINGFACE_ID = 'CohereLabs/cohere-transcribe-03-2026'
+# Without a language the model guesses one per segment, and on short, quiet segments it
+# guesses Portuguese or Arabic and can loop.
+LANGUAGE = 'en'
+MAX_NEW_TOKENS = 256
 
 
-class WhisperPipeline:
+class CohereTranscriber:
     def __init__(self, model_id: str, device: str, dtype: torch.dtype) -> None:
-        asr_model = WhisperForConditionalGeneration.from_pretrained(
-            model_id, torch_dtype=dtype, low_cpu_mem_usage=True, use_safetensors=True
-        ).to(device)
-        processor = WhisperProcessor.from_pretrained(model_id)
-        self._pipe = pipeline(
-            'automatic-speech-recognition',
-            model=asr_model,
-            tokenizer=processor.tokenizer,
-            feature_extractor=processor.feature_extractor,
-            dtype=dtype,
-            device=device,
-            batch_size=1,
-        )
-        self._pipe.model.generation_config.language = 'en'
-        self._pipe.model.generation_config.task = 'transcribe'
-        self._pipe.model.generation_config.no_repeat_ngram_size = 3
-        self._pipe.model.generation_config.forced_decoder_ids = None
+        self._device = device
+        self._dtype = dtype
+        self._processor = CohereAsrProcessor.from_pretrained(model_id)
+        self._model = CohereAsrForConditionalGeneration.from_pretrained(model_id, dtype=dtype).to(device).eval()
 
-    def __call__(self, audio: np.ndarray, **kwargs) -> dict:
-        return self._pipe(audio, **kwargs)
+    @torch.inference_mode()
+    def __call__(self, audio: np.ndarray) -> str:
+        inputs = self._processor(audio, sampling_rate=SAMPLE_RATE, return_tensors='pt', language=LANGUAGE)
+        inputs.to(self._device, dtype=self._dtype)
+        outputs = self._model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS)
+        return self._processor.decode(outputs, skip_special_tokens=True)[0].strip()
 
 
-def load_whisper() -> WhisperPipeline:
+def load_transcriber() -> CohereTranscriber:
     print('Loading model...')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
-    dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-    return WhisperPipeline(WHISPER_HUGGINGFACE_ID, device, dtype)
+    dtype = torch.bfloat16 if torch.cuda.is_available() else torch.float32
+    return CohereTranscriber(COHERE_HUGGINGFACE_ID, device, dtype)
 
 
 @dataclasses.dataclass
@@ -316,7 +307,7 @@ def default_speaker_device(sources: list[Device], override: int | None) -> str:
 
 
 def transcribe_worker(
-    pipe: WhisperPipeline,
+    transcribe: CohereTranscriber,
     multi_source: bool,
     audio: queue.Queue[AudioChunk | None],
     transcript: TranscriptFile,
@@ -325,7 +316,7 @@ def transcribe_worker(
         chunk = audio.get()
         if chunk is None:
             break
-        text = pipe(chunk.data)['text'].strip()
+        text = transcribe(chunk.data)
         if text:
             line = f'[{chunk.origin}] {text}' if multi_source else text
             print(line)
@@ -373,6 +364,18 @@ def decode_file(path: Path) -> np.ndarray:
     ]
     raw = subprocess.run(cmd, capture_output=True, check=True).stdout
     return np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+
+
+def speech_segments(audio: np.ndarray, vad: VadAccumulator) -> list[np.ndarray]:
+    segments = []
+    for start in range(0, len(audio) - vad.frame_samples + 1, vad.frame_samples):
+        segment = vad.feed(audio[start:start + vad.frame_samples])
+        if segment is not None:
+            segments.append(segment)
+    remainder = vad.flush()
+    if remainder is not None:
+        segments.append(remainder)
+    return segments
 
 
 def screen_worker(
@@ -455,10 +458,10 @@ def live(
         capture_devices.append(('remote', default_speaker_device(sources, speaker_device)))
 
     if capture_devices:
-        pipe = load_whisper()
+        transcribe = load_transcriber()
         threads.append(threading.Thread(
             target=transcribe_worker,
-            args=(pipe, len(capture_devices) > 1, audio, TranscriptFile(transcript_path)),
+            args=(transcribe, len(capture_devices) > 1, audio, TranscriptFile(transcript_path)),
             daemon=True,
         ))
         for origin, capture_device in capture_devices:
@@ -502,16 +505,31 @@ def recorded(
     transcript_path: Path = typer.Option(
         Path('transcript.txt'),
         '--transcript',
-        help='File the transcript is written to, one line per Whisper chunk. Overwritten.',
+        help='File the transcript is written to, one line per speech segment. Overwritten.',
+    ),
+    min_silence_ms: int = typer.Option(
+        MIN_SILENCE_MS,
+        '--min-silence-ms',
+        help='Milliseconds of silence required to end a speech segment.',
+    ),
+    max_speech_ms: int = typer.Option(
+        MAX_SPEECH_MS,
+        '--max-speech-ms',
+        help='Maximum milliseconds of speech before forcing a speech segment boundary.',
     ),
 ) -> None:
     """Transcribe a recording made elsewhere."""
-    pipe = load_whisper()
+    transcribe = load_transcriber()
     print(f'Transcribing {recording}...')
-    result = pipe(decode_file(recording), return_timestamps=True)
-    lines = [chunk['text'].strip() for chunk in result['chunks'] if chunk['text'].strip()]
-    transcript_path.write_text(''.join(line + '\n' for line in lines))
-    print(f'Wrote {len(lines)} lines to {transcript_path}')
+    vad = VadAccumulator(min_silence_ms=min_silence_ms, max_speech_ms=max_speech_ms)
+    transcript = TranscriptFile(transcript_path)
+    lines = 0
+    for segment in speech_segments(decode_file(recording), vad):
+        text = transcribe(segment)
+        if text:
+            transcript.add(text)
+            lines += 1
+    print(f'Wrote {lines} lines to {transcript_path}')
 
 
 if __name__ == '__main__':
@@ -649,6 +667,7 @@ class TestVadAccumulator:
         assert kept / SAMPLE_RATE > 58
 
 
+# The model is gated - accept its terms on the Hub and export HF_TOKEN first.
 # Frequently used: uv run souffleur.py live --source all
 # Pick devices: uv run souffleur.py devices, then live --microphone-device N --speaker-device M
 # Transcribe a file: uv run souffleur.py recorded recording.m4a --transcript recording.txt
