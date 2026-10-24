@@ -1,0 +1,15 @@
+---
+- name: Tools - Packages
+  ansible.builtin.apt:
+    pkg:
+      - ffmpeg
+      - fzf
+      - rclone
+    state: latest
+    update_cache: true
+
+- name: Tools - Scripts
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/"
+    dest: /usr/local/bin/
+    mode: "0755"

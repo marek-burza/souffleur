@@ -1,0 +1,22 @@
+---
+name: Python
+on: [push]
+permissions:
+  contents: read
+jobs:
+  pipeline:
+    name: Pipeline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "latest"
+      - name: Lint
+        run: /bin/sh .github/workflows/python.linter.sh
+      - name: Test
+        run: uv run --no-project pytest roles/tools/files/transcriptor.py -v

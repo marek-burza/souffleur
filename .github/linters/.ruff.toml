@@ -1,0 +1,3 @@
+[lint]
+extend-select = ["I", "E", "B", "SIM"]
+external = ["F824", "E501"]

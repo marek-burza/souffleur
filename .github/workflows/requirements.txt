@@ -1,0 +1,11 @@
+bandit==1.9.4
+complexipy==8.1.0
+mypy==2.4.0
+numpy==2.5.4
+pillow==13.0.0
+pytest==9.1.1
+ruff==0.17.2
+torch==2.14.1
+transformers==5.20.2
+ty==0.0.91
+typer==0.27.3
