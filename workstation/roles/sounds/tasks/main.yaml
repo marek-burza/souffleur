@@ -1,0 +1,5 @@
+---
+- name: Sound - Disable screenshot
+  ansible.builtin.command:
+    cmd: mv /usr/share/sounds/freedesktop/stereo/screen-capture.oga /usr/share/sounds/freedesktop/stereo/screen-capture.oga.disabled
+    removes: /usr/share/sounds/freedesktop/stereo/screen-capture.oga

@@ -1,0 +1,11 @@
+# This file contains ignores rule violations for ansible-lint
+roles/firewall/tasks/main.yaml package-latest
+roles/fonts/tasks/main.yaml no-changed-when
+roles/git/tasks/main.yaml package-latest
+roles/nvidia/tasks/main.yaml no-changed-when
+roles/nvidia/tasks/main.yaml package-latest
+roles/pdfs/tasks/main.yaml package-latest
+roles/podman/tasks/main.yaml package-latest
+roles/swap/tasks/main.yaml no-changed-when
+roles/tools/tasks/main.yaml package-latest
+roles/uv/tasks/main.yaml no-changed-when

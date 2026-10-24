@@ -1,0 +1,9 @@
+---
+- name: Swap - Disable Now
+  ansible.builtin.command: swapoff -a
+
+- name: Slurm - Disable Always
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: "^.*swap.*"
+    state: absent

@@ -1,0 +1,18 @@
+---
+- name: Workstation
+  hosts: localhost
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  gather_facts: false
+  roles:
+    - role: firewall
+    - role: cups
+    - role: podman
+    - role: nvidia
+    - role: swap
+    - role: uv
+    - role: fonts
+    - role: sounds
+    - role: git
+    - role: pdfs
+    - role: tools

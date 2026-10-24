@@ -1,0 +1,21 @@
+---
+- name: Podman - Installation
+  ansible.builtin.apt:
+    pkg:
+      - podman
+      - podman-docker
+    state: latest
+    update_cache: true
+
+- name: Podman - Docker Hub
+  ansible.builtin.lineinfile:
+    path: /etc/containers/registries.conf
+    line: 'unqualified-search-registries = ["docker.io"]'
+    state: present
+
+- name: Podman - Prune
+  ansible.builtin.cron:
+    name: podman-prune
+    hour: "0"
+    minute: "0"
+    job: podman system prune -a -f --filter "until=48h" --volumes

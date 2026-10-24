@@ -1,0 +1,10 @@
+---
+- name: UV - Installation
+  ansible.builtin.command: /bin/sh -c "((curl -LsSf https://astral.sh/uv/install.sh | sh); uv self update) || true"
+
+- name: UV - Clean
+  ansible.builtin.cron:
+    name: uv-clean
+    hour: "0"
+    minute: "0"
+    job: uv cache clean

@@ -1,0 +1,98 @@
+---
+- name: NVIDIA - Kernel
+  ansible.builtin.command: uname -r
+  register: nvidia_uname_kernel_version_output
+
+- name: NVIDIA - Prerequisites
+  ansible.builtin.apt:
+    pkg:
+      - build-essential
+      - ca-certificates
+      - gnupg2
+      - linux-headers-{{ nvidia_uname_kernel_version_output.stdout }}
+    state: latest
+    update_cache: true
+
+- name: NVIDIA - Architecture
+  ansible.builtin.command: uname -m
+  register: nvidia_uname_architecture_output
+
+- name: NVIDIA - Distribution
+  ansible.builtin.command: /bin/sh -c '. /etc/os-release && echo $ID | tr -d .'
+  register: nvidia_os_distribution_output
+
+- name: NVIDIA - Release
+  ansible.builtin.command: /bin/sh -c '. /etc/os-release && echo $VERSION_ID | tr -d .'
+  register: nvidia_os_release_output
+
+- name: NVIDIA - Driver Version
+  ansible.builtin.command: /bin/sh -c "apt list nvidia-driver* 2> /dev/null | grep -oP 'nvidia-driver-\\K\\d+' | sort | tail -1"
+  register: nvidia_driver_version
+
+- name: NVIDIA - CUDA Driver
+  ansible.builtin.apt:
+    pkg:
+      - nvidia-driver-{{ nvidia_driver_version.stdout }}-open
+    state: latest
+    update_cache: true
+
+- name: NVIDIA - CUDA Driver Check
+  ansible.builtin.command: nvidia-smi
+  register: nvidia_smi_check
+  failed_when: false
+  changed_when: false
+
+- name: NVIDIA - Container Toolkit GPG Temporary
+  ansible.builtin.tempfile:
+    state: file
+    prefix: container-toolkit.
+    suffix: .key
+  register: nvidia_container_toolkit_key
+
+- name: NVIDIA - Container Toolkit GPG
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: "{{ nvidia_container_toolkit_key.path }}"
+    force: true
+    mode: "0600"
+
+- name: NVIDIA - Container Toolkit GPG Dearmor
+  ansible.builtin.command: "gpg -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg --batch --yes --dearmor {{ nvidia_container_toolkit_key.path }}"
+
+- name: NVIDIA - Container Toolkit GPG cleanup
+  ansible.builtin.file:
+    path: "{{ nvidia_container_toolkit_key.path }}"
+    state: absent
+
+- name: NVIDIA - Container Toolkit Repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /"
+    state: present
+
+- name: NVIDIA - Container Toolkit Upgrade
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: full
+
+- name: NVIDIA - Container Toolkit
+  ansible.builtin.apt:
+    pkg:
+      - nvidia-container-toolkit
+      - nvidia-container-toolkit-base
+      - libnvidia-container-tools
+      - libnvidia-container1
+    state: latest
+    update_cache: true
+
+- name: NVIDIA - Container Toolkit Podman Note
+  ansible.builtin.debug:
+    msg: "Re-run provisioning after a reboot to configure NVIDIA Container Toolkit with Podman"
+  when: nvidia_smi_check.rc != 0
+
+- name: NVIDIA - Container Toolkit Podman
+  ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+  when: nvidia_smi_check.rc == 0
+
+# - NVIDIA CUDA Installation Guide for Linux: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
+# - Installing the NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+# - See also: https://linuxcapable.com/how-to-install-cuda-on-ubuntu-linux/
