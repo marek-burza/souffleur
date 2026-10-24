@@ -11,20 +11,3 @@ updates:
       all-deps:
         patterns:
           - "*"
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    cooldown:
-      default-days: 7
-    groups:
-      all-deps:
-        patterns:
-          - "*"
-    ignore:
-      # TS 7 (first stable release 7.0.2, 2026-07-08) breaks the toolchain:
-      # typescript-eslint refuses to run ("does not support TS 7.0") and
-      # vue-tsc fails with ERR_PACKAGE_PATH_NOT_EXPORTED on './lib/tsc',
-      # which no longer exists in TS 7's package exports.
-      - dependency-name: "typescript"
-        update-types: ["version-update:semver-major"]
