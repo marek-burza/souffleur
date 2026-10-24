@@ -1,5 +1,5 @@
 ---
-name: Ansible Lint
+name: Ansible
 on: [push]
 jobs:
   pipeline:
