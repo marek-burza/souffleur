@@ -12,3 +12,13 @@ updates:
       all-deps:
         patterns:
           - "*"
+  - package-ecosystem: "pip"
+    directory: "/.github/workflows"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      all-deps:
+        patterns:
+          - "*"

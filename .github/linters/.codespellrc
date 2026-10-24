@@ -1,0 +1,3 @@
+[codespell]
+skip = *.txt,*.in,*.out
+ignore-words-list = connexion,loner

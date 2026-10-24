@@ -1,0 +1,11 @@
+---
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        actions/*: ref-pin
+        github/*: ref-pin
+        super-linter/super-linter: ref-pin
+        astral-sh/setup-uv: ref-pin
+        ansible/ansible-lint: ref-pin
+        dependabot/fetch-metadata: ref-pin

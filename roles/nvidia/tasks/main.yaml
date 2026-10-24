@@ -92,7 +92,6 @@
 - name: NVIDIA - Container Toolkit Podman
   ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
   when: nvidia_smi_check.rc == 0
-
 # - NVIDIA CUDA Installation Guide for Linux: https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html
 # - Installing the NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 # - See also: https://linuxcapable.com/how-to-install-cuda-on-ubuntu-linux/
