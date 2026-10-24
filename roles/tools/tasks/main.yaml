@@ -1,9 +1,22 @@
 ---
+- name: Tools - Myna Key
+  ansible.builtin.get_url:
+    url: https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x1B9E83E3BF3988D7A7C5208BC7F2E85DBE69CF3D
+    dest: /etc/apt/keyrings/myna.asc
+    mode: "0644"
+
+- name: Tools - Myna Repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/myna.asc] https://ppa.launchpadcontent.net/canonical-desktop-team/myna/ubuntu {{ lookup('ansible.builtin.pipe', 'lsb_release -cs') }} main"
+    filename: myna
+    state: present
+
 - name: Tools - Packages
   ansible.builtin.apt:
     pkg:
       - ffmpeg
       - fzf
+      - myna-config
       - rclone
     state: latest
     update_cache: true
