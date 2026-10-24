@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Souffleur">
-  <rect width="64" height="64" rx="14" fill="#141413"/>
-  <!-- hood, floor, tail: one S -->
-  <path d="M45.02 21.07 A17 17 0 0 0 15 32 L49 32 A17 17 0 0 1 18.98 42.93" fill="none" stroke="#D97757" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <!-- the prompter: same centre as the arches -->
-  <path d="M21.5 32 A10.5 10.5 0 0 1 42.5 32 Z" fill="#D97757"/>
-</svg>
